@@ -1,7 +1,10 @@
 {
     "name": "il4mb/routing",
-    "version": "0.1.0-alpha.0",
     "description": "Simple Routing System",
+    "type": "library",
+    "require": {
+        "php": "^8.0"
+    },
     "license": "MIT",
     "autoload": {
         "psr-4": {
@@ -14,6 +17,5 @@
             "email": "durianbohong@gmail.com"
         }
     ],
-    "minimum-stability": "alpha",
-    "require": {}
+    "minimum-stability": "alpha"
 }
