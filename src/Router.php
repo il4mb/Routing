@@ -132,7 +132,7 @@ class Router implements Interceptor
             if ($interceptor->onDispatch($request, $response)) break;
         }
 
-        $executor = new MiddlewareExecutor($route[0]->middlewares);
+        $executor = new MiddlewareExecutor($route[0]->middlewares ?? []);
         $response = $executor($request, function () use ($response) {
             return $response;
         });
