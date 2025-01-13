@@ -122,7 +122,7 @@ class Router implements Interceptor
 
         $uri = $request->getUri();
         // find match route
-        $route = array_values(array_filter($routes, fn($route) => $uri->matchRoute($route)));
+        $route = array_values(array_filter($routes, fn($route) => $request->getMethod() === $route->method && $uri->matchRoute($route)));
         $response = new Response(empty($route) ? null : $route[0]);
         // if not found
         if (empty($route)) $response->setCode(Code::NOT_FOUND);
