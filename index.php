@@ -23,7 +23,7 @@ class AdminAware implements Middleware
 class AdminController
 {
 
-    #[Route(Method::PUT, "/")]
+    #[Route(Method::GET, "/")]
     function home()
     {
         return ["Hello World"];
