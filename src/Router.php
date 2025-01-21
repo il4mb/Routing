@@ -6,15 +6,14 @@ use Il4mb\Routing\Http\Code;
 use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Http\Response;
 use InvalidArgumentException;
-use LogicException;
-use ReflectionAttribute;
 use ReflectionClass;
-use ReflectionMethod;
 use Il4mb\Routing\Map\Route;
 use Il4mb\Routing\Middlewares\MiddlewareExecutor;
 
 class Router implements Interceptor
 {
+
+    private readonly string $routeOffset;
 
     /**
      * Summary of routers
@@ -32,7 +31,7 @@ class Router implements Interceptor
     /**
      * @var array<string, mixed> $options
      */
-    private readonly array $options;
+    private readonly array   $options;
 
     /**
      * Summary of __construct
@@ -43,6 +42,24 @@ class Router implements Interceptor
      */
     function __construct(array $interceptors = [], array $options = [])
     {
+        $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
+        $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        $file = null;
+        foreach ($traces as $trace) {
+            if (isset($trace['file'])) {
+                $file = $trace['file'];
+                break;
+            }
+        }
+
+        if (is_string($root) && is_string($file)) {
+            $root = preg_replace('/\\\\|\\//im', '/', $root);
+            $path = preg_replace('/\\\\|\\//im', '/', dirname($file));
+            $offset = str_replace($root, "", $path);
+            $this->routeOffset = $offset;
+        } else {
+            $this->routeOffset = "";
+        }
         $this->interceptors = [
             $this,
             ...$interceptors
@@ -86,7 +103,12 @@ class Router implements Interceptor
                 );
                 if (count($duplicates) > 0) throw new InvalidArgumentException("Cannot add path \"$obj->path\", same path already added in collection.");
             }
-            $this->routes[] = $obj;
+
+            $path = "/" . trim($this->routeOffset, "\/") . "/" . trim($obj->path, "\/");
+            $this->routes[] = $obj->clone([
+                "path" => $path,
+                "callback" => $obj->callback
+            ]);
         } else {
             $reflector = new ReflectionClass($obj);
             foreach ($reflector->getMethods() as $method) {

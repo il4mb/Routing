@@ -62,6 +62,25 @@ class Route
             "parameters"  => $this->parameters
         ];
     }
+
+    function clone($args = [])
+    {
+        $constructorArgs = ["path", "method", "middlewares"];
+        $newArgs = [];
+        foreach ($constructorArgs as $key) {
+            if (isset($args[$key])) {
+                $newArgs[$key] = $args[$key];
+            } else {
+                $newArgs[$key] = $this->{$key};
+            }
+        }
+        $route = new Route(...$newArgs);
+        foreach ($args as $key => $value) {
+            if (in_array($key, $constructorArgs)) continue;
+            $route->$key = $value;
+        }
+        return $route;
+    }
 }
 
 
