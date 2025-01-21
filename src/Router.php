@@ -63,7 +63,7 @@ class Router implements Interceptor
 
         $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
         if (is_string($file) && !file_exists($htaccessFile)) {
-            $fileName = basename($file);
+            $fileName = trim($this->routeOffset, "\/") . "/" . basename($file);
             $htaccess = <<<EOS
 # THIS FILE GENERATE BY <IL4MB/ROUTING> 
 # YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
