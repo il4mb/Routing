@@ -3,7 +3,6 @@
 use Il4mb\Routing\Map\Route;
 use Il4mb\Routing\Http\Method;
 use Il4mb\Routing\Http\Request;
-use Il4mb\Routing\Middlewares\Middleware;
 use Il4mb\Routing\Router;
 
 ini_set("log_errors", 1);
@@ -11,40 +10,38 @@ ini_set("error_log", "php-error.log");
 
 require_once __DIR__ . "/vendor/autoload.php";
 
-class AdminAware implements Middleware
-{
-    function handle(Request $request, Closure $next): Il4mb\Routing\Http\Response
-    {
-        return $next($request);
-    }
-}
 
 
-class AdminController
+class Controller
 {
 
     #[Route(Method::GET, "/")]
-    function home()
+    function get()
     {
-        return ["Hello World"];
+        return ["From Get"];
     }
 
 
-    #[Route(Method::GET, "/2/{any[1]}", [AdminAware::class])]
-    function home2($any)
+    #[Route(Method::POST, "/")]
+    function post(Request $req)
     {
-        return "hhh " . $any;
+        echo json_encode($req->get("*"));
+        return ["From Post"];
+    }
+
+    #[Route(Method::PUT, "/")]
+    function put(Request $req)
+    {
+        //    echo "From PUT\n";
+        echo json_encode($req->get("*"));
+        //return ["From Put"];
     }
 }
 
 
-
-$obj = new AdminController();
-$router = new Router([], [
+$router = new Router(options: [
     "throwOnDuplicatePath" => false
 ]);
-$router->addRoute(new AdminController());
-
+$router->addRoute(new Controller());
 $response = $router->dispatch(Request::getInstance());
-
 echo $response->send();

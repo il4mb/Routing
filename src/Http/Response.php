@@ -115,6 +115,7 @@ class Response
         ];
     }
 
+    
     final function http_response_code(Code $code): void
     {
 
@@ -124,6 +125,7 @@ class Response
         } else
             @http_response_code($code->value);
     }
+
 
     final public function send(): string
     {
@@ -137,7 +139,7 @@ class Response
         }
 
         // Ensure no extra output corrupts headers
-        if (ob_get_length() > 0) ob_clean();
+        // if (ob_get_length() > 0) ob_clean();
 
         // Send headers
         foreach ($this->headers as $key => $value) header("{$key}: {$value}");

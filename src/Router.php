@@ -31,13 +31,15 @@ class Router implements Interceptor
     /**
      * @var array<string, mixed> $options
      */
-    private readonly array   $options;
+    private readonly array $options;
 
     /**
      * Summary of __construct
      * @param array $interceptors
      * @param array $options - options for router
      *              - *throwOnDuplicatePath*   default true
+     *              - *autoDetectFolderOffset* default true
+     *
      * 
      */
     function __construct(array $interceptors = [], array $options = [])
@@ -65,7 +67,7 @@ class Router implements Interceptor
         if (is_string($file) && !file_exists($htaccessFile)) {
             $fileName = trim($this->routeOffset, "\/") . "/" . basename($file);
             $htaccess = <<<EOS
-# THIS FILE GENERATE BY <IL4MB/ROUTING> 
+# THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
 # YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
 RewriteEngine on
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -83,6 +85,7 @@ EOS;
         $this->routes = [];
         $this->options = [
             "throwOnDuplicatePath" => true,
+            "autoDetectFolderOffset" => true,
             ...$options
         ];
     }
@@ -158,9 +161,9 @@ EOS;
         // sort descending by path
         usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
-        $uri = $request->getUri();
+        $uri = $request->uri;
         // find match route
-        $route = array_values(array_filter($routes, fn($route) => $request->getMethod() === $route->method && $uri->matchRoute($route)));
+        $route = array_values(array_filter($routes, fn($route) => $request->method === $route->method && $uri->matchRoute($route)));
         $response = new Response(empty($route) ? null : $route[0]);
         // if not found
         if (empty($route)) $response->setCode(Code::NOT_FOUND);
