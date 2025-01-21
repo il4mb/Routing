@@ -60,6 +60,22 @@ class Router implements Interceptor
         } else {
             $this->routeOffset = "";
         }
+
+        $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
+        if (is_string($file) && !file_exists($htaccessFile)) {
+            $fileName = basename($file);
+            $htaccess = <<<EOS
+# THIS FILE GENERATE BY <IL4MB/ROUTING> 
+# YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
+RewriteEngine on
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ /$fileName [NC,L,QSA]
+EOS;
+            file_put_contents($htaccessFile, $htaccess);
+        }
+
+
         $this->interceptors = [
             $this,
             ...$interceptors
