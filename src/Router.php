@@ -183,7 +183,7 @@ class Router implements Interceptor
         if ($route) {
             $params = $route->parameters;
             if ($route && $callback = $route->callback) {
-                $content = $callback(...$params);
+                $content = $callback(...[...$params, $request, $response]);
                 $response->setContent($content);
             }
         }
