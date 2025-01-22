@@ -21,6 +21,12 @@ class Controller
         return ["From Get"];
     }
 
+    #[Route(Method::GET, "/hallo")]
+    function get1()
+    {
+        return ["Halllo From Halaman Hallo"];
+    }
+
 
     #[Route(Method::POST, "/")]
     function post(Request $req)
@@ -29,12 +35,10 @@ class Controller
         return ["From Post"];
     }
 
-    #[Route(Method::PUT, "/")]
-    function put(Request $req)
+    #[Route(Method::PUT, "/{adios}/")]
+    function put(Request $req, $adios, $adios1)
     {
-        //    echo "From PUT\n";
-        echo json_encode($req->get("*"));
-        //return ["From Put"];
+        return ["Ini Kontent"];
     }
 }
 
@@ -43,5 +47,5 @@ $router = new Router(options: [
     "throwOnDuplicatePath" => false
 ]);
 $router->addRoute(new Controller());
-$response = $router->dispatch(Request::getInstance());
+$response = $router->dispatch(new Request());
 echo $response->send();

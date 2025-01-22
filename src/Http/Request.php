@@ -18,19 +18,19 @@ class Request
         "cookies" => []
     ];
     public readonly ?Method $method;
-    public readonly URL $uri;
-    public readonly array $headers;
-    private static $instance;
+    public readonly Url $uri;
+    public readonly ListPair $headers;
 
-    private function __construct()
+    function __construct()
     {
 
         $this->method      = Method::tryFrom($_SERVER['REQUEST_METHOD'] ?? 'GET');
         $this->uri         = new URL();
-        if (function_exists("getallheaders"))
-            $this->headers = getallheaders();
-        else
-            $this->headers = [];
+        $this->headers     = new ListPair(
+            function_exists("getallheaders")
+                ? getallheaders()
+                : []
+        );
 
         foreach ($_GET as $key => $value) {
             $this->props["queries"][$key] = $value;
@@ -47,22 +47,23 @@ class Request
         foreach ($_FILES as $key => $value) {
             $this->props["files"][$key] = $value;
         }
+
+        // clear state
+        $_GET    = [];
+        $_POST   = [];
+        $_COOKIE = [];
+        $_FILES  = [];
     }
 
 
-    public static function getInstance()
-    {
-        if (is_null(self::$instance)) {
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
-
-
-    function get(string $name, $default = null)
+    function get(string $name)
     {
         if ($name == "*") return $this->props;
-        return $this->props[$name] ?? $default;
+        $val = $this->props[$name] ?? null;
+        if ($val === null) {
+            $val = $this->getBody($name) ?? $this->getQuery($name) ?? null;
+        }
+        return $val;
     }
 
 

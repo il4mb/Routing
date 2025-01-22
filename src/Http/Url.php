@@ -51,6 +51,7 @@ class Url
 
     function matchRoute(Route $route)
     {
+
         $path = $this->path;
         if ($this->pathCompare($route->path, $path)) return true;
         $path = rtrim($path, "/") . "/";
