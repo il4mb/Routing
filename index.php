@@ -10,8 +10,6 @@ ini_set("error_log", "php-error.log");
 
 require_once __DIR__ . "/vendor/autoload.php";
 
-
-
 class Controller
 {
 
@@ -40,6 +38,12 @@ class Controller
     {
         $req->set("view", 135);
         return ["Ini Kontent"];
+    }
+
+    #[Route(Method::DELETE, "/*")]
+    function delete()
+    {
+        return ["From Delete"];
     }
 }
 

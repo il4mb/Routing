@@ -65,7 +65,7 @@ class Router implements Interceptor
 
         $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
         if (is_string($file) && !file_exists($htaccessFile)) {
-            $fileName = trim($this->routeOffset, "\/") . "/" . basename($file);
+            $fileName = rawurlencode(trim($this->routeOffset, "\/") . "/" . basename($file));
             $htaccess = <<<EOS
 # THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
 # YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
@@ -124,6 +124,9 @@ EOS;
                     && $route->method === $obj->method
                 );
                 if (count($duplicates) > 0) throw new InvalidArgumentException("Cannot add path \"$obj->path\", same path already added in collection.");
+            }
+            foreach ($this->interceptors as $interceptor) {
+                if ($interceptor->onAddRoute($obj)) break;
             }
             $this->routes[] = $obj->clone([
                 "path" => $path,
@@ -187,28 +190,34 @@ EOS;
     }
 
 
-    function onAddRoute(Route $route): bool
+    function onAddRoute(Route &$route): bool
     {
         return false; // return false to pass to next interceptor
     }
-    function onBeforeInvoke(Route $route): bool
+    function onBeforeInvoke(Route &$route): bool
     {
         return false; // return false to pass to next interceptor
     }
-    function onInvoke(Route $route): bool
+    function onInvoke(Route &$route): bool
     {
         return false; // return false to pass to next interceptor
     }
 
-    function onDispatch(Request $request, Response $response): bool
+    function onDispatch(Request &$request, Response &$response): bool
     {
 
         $route = $request->get("__route", Route::class);
         if ($route) {
             $params = $route->parameters;
             if ($route && $callback = $route->callback) {
+                foreach ($this->interceptors as $interceptor) {
+                    if ($interceptor->onBeforeInvoke($route)) break;
+                }
                 $content = $callback(...[...$params, $request, $response]);
                 $response->setContent($content);
+                foreach ($this->interceptors as $interceptor) {
+                    if ($interceptor->onInvoke($route)) break;
+                }
             }
         }
 

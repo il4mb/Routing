@@ -10,11 +10,11 @@ use Il4mb\Routing\Map\Route;
  */
 interface Interceptor
 {
-    function onAddRoute(Route $route): bool;
+    function onAddRoute(Route &$route): bool;
     
-    function onInvoke(Route $route): bool;
+    function onInvoke(Route &$route): bool;
 
-    function onBeforeInvoke(Route $route): bool;
+    function onBeforeInvoke(Route &$route): bool;
 
-    function onDispatch(Request $request, Response $response): bool;
+    function onDispatch(Request &$request, Response &$response): bool;
 }
