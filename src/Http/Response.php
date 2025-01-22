@@ -9,7 +9,6 @@ use InvalidArgumentException;
 class Response
 {
 
-    public readonly ?Route $route;
     public readonly ListPair $headers;
     public readonly ListPair $cookies;
 
@@ -18,7 +17,6 @@ class Response
 
 
     public function __construct(
-        ?Route $route,
         $content = "",
         $code = Code::OK,
         array $headers = [
@@ -26,7 +24,6 @@ class Response
             "content-encoding" => "utf-8"
         ]
     ) {
-        $this->route   = $route;
         $this->content = $content;
         $this->code    = $code;
         $this->headers = new ListPair($headers);
@@ -173,18 +170,12 @@ class Response
                 "Content-Encoding" => $this->headers["content-encoding"]
             ],
             "cookies" => $this->cookies,
-            ...(empty($this->route) ? [] : [
-                "route" => [
-                    "path" => $this->route->path,
-                    "method" => $this->route->method->name
-                ]
-            ])
         ];
     }
 
     public static function redirect(string $path)
     {
-        return new self(null, [], Code::TEMPORARY_REDIRECT, [
+        return new self([], Code::TEMPORARY_REDIRECT, [
             "Location" => "/" . ltrim($path, "/")
         ]);
     }

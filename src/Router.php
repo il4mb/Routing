@@ -115,15 +115,16 @@ EOS;
     function addRoute(mixed $obj)
     {
         if ($obj instanceof Route) {
+            $path = "/" . trim($this->routeOffset, "\/") . "/" . trim($obj->path, "\/");
+
             if ($this->options["throwOnDuplicatePath"]) {
                 $duplicates = array_filter(
                     $this->routes,
-                    fn($route) => $route->path === $obj->path
+                    fn($route) => $route->path === $path 
+                    && $route->method === $obj->method
                 );
                 if (count($duplicates) > 0) throw new InvalidArgumentException("Cannot add path \"$obj->path\", same path already added in collection.");
             }
-
-            $path = "/" . trim($this->routeOffset, "\/") . "/" . trim($obj->path, "\/");
             $this->routes[] = $obj->clone([
                 "path" => $path,
                 "callback" => $obj->callback
@@ -164,10 +165,14 @@ EOS;
         $uri = $request->uri;
         // find match route
         $route = array_values(array_filter($routes, fn($route) => $request->method === $route->method && $uri->matchRoute($route)));
-        $response = new Response(empty($route) ? null : $route[0]);
-        // if not found
-        if (empty($route)) $response->setCode(Code::NOT_FOUND);
+        $response = new Response();
 
+        // if not found
+        if (empty($route)) {
+            $response->setCode(Code::NOT_FOUND);
+        } else {
+            $request->set("__route", $route[0]);
+        }
         // invoke interceptor
         foreach ($this->interceptors as $interceptor) {
             if ($interceptor->onDispatch($request, $response)) break;
@@ -198,7 +203,7 @@ EOS;
     function onDispatch(Request $request, Response $response): bool
     {
 
-        $route = $response->route;
+        $route = $request->get("__route", Route::class);
         if ($route) {
             $params = $route->parameters;
             if ($route && $callback = $route->callback) {

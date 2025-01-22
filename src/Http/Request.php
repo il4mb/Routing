@@ -7,15 +7,15 @@ use Il4mb\Routing\Http\Method;
 
 class Request
 {
-    private array $fixKeys = ["files", "body", "queries", "cookies"];
+    private array $fixKeys = ["__files", "__body", "__queries", "__cookies"];
     /**
      * @var array<string, string> $props
      */
     protected array $props = [
-        "files"   => [],
-        "body"    => [],
-        "queries" => [],
-        "cookies" => []
+        "__files"   => [],
+        "__body"    => [],
+        "__queries" => [],
+        "__cookies" => []
     ];
     public readonly ?Method $method;
     public readonly Url $uri;
@@ -33,19 +33,19 @@ class Request
         );
 
         foreach ($_GET as $key => $value) {
-            $this->props["queries"][$key] = $value;
+            $this->props["__queries"][$key] = $value;
         }
         foreach ($_POST as $key => $value) {
-            $this->props["body"][$key] = $value;
+            $this->props["__body"][$key] = $value;
         }
 
         $this->parseMutipartBoundary();
 
         foreach ($_COOKIE as $key => $value) {
-            $this->props["cookies"][$key] = $value;
+            $this->props["__cookies"][$key] = $value;
         }
         foreach ($_FILES as $key => $value) {
-            $this->props["files"][$key] = $value;
+            $this->props["__files"][$key] = $value;
         }
 
         // clear state
@@ -55,16 +55,34 @@ class Request
         $_FILES  = [];
     }
 
-
-    function get(string $name)
+    /**
+     * @template T
+     * @param string $name The name of the property to retrieve.
+     * @param class-string<T>|null $type The class string for type checking or casting (optional).
+     * @return T|array|null The value cast to the specified type or null if not found.
+     */
+    function get(string $name, string $type = null)
     {
-        if ($name == "*") return $this->props;
+        // Retrieve the value from props or fallback sources.
+        if ($name === "*") {
+            return $this->props; // Ensure $this->props is typed correctly (e.g., array<string, mixed>).
+        }
+
         $val = $this->props[$name] ?? null;
         if ($val === null) {
             $val = $this->getBody($name) ?? $this->getQuery($name) ?? null;
         }
+
+        // If a type is provided, validate or cast the value.
+        if ($type !== null) {
+            if (!is_a($val, $type, allow_string: true)) {
+                return null;
+            }
+        }
+
         return $val;
     }
+
 
 
     function set(string $name, mixed $value): void
@@ -80,17 +98,17 @@ class Request
 
     function getBody($name)
     {
-        return $this->props["body"][$name] ?? null;
+        return $this->props["__body"][$name] ?? null;
     }
 
     function getQuery($name)
     {
-        return $this->props["queries"][$name] ?? null;
+        return $this->props["__queries"][$name] ?? null;
     }
 
     function getFile(string $name)
     {
-        return $this->props["files"][$name] ?? null;
+        return $this->props["__files"][$name] ?? null;
     }
 
     public function isMethod(Method $method)
@@ -150,14 +168,14 @@ class Request
                         if ($filename) {
                             $tempFilePath = tempnam(sys_get_temp_dir(), uniqid('upload_', true));
                             file_put_contents($tempFilePath, $body);
-                            $this->props["files"][$name] = [
+                            $this->props["__files"][$name] = [
                                 'type' => $headers['Content-Type'] ?? 'application/octet-stream',
                                 'name' => $filename,
                                 'tmp_name' => $tempFilePath,
                                 'size' => strlen($body),
                             ];
                         } else {
-                            $this->props["body"][$name] = trim($body);
+                            $this->props["__body"][$name] = trim($body);
                         }
                     }
                 }
@@ -165,7 +183,7 @@ class Request
         } else {
             $jsonArray = json_decode($rawBody, true) ?? [];
             foreach ($jsonArray as $key => $val) {
-                $this->props["body"][$key] = $val;
+                $this->props["__body"][$key] = $val;
             }
         }
     }

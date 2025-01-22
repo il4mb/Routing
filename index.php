@@ -38,14 +38,13 @@ class Controller
     #[Route(Method::PUT, "/{adios}/")]
     function put(Request $req, $adios, $adios1)
     {
+        $req->set("view", 135);
         return ["Ini Kontent"];
     }
 }
 
 
-$router = new Router(options: [
-    "throwOnDuplicatePath" => false
-]);
+$router = new Router();
 $router->addRoute(new Controller());
 $response = $router->dispatch(new Request());
 echo $response->send();
