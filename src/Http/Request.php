@@ -111,6 +111,11 @@ class Request
         return $this->props["__files"][$name] ?? null;
     }
 
+    function getCookie(string $name)
+    {
+        return $this->props["__cookies"][$name] ?? null;
+    }
+
     public function isMethod(Method $method)
     {
         return strtoupper($this->method?->value) === strtoupper($method->value);
