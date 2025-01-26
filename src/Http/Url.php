@@ -53,8 +53,9 @@ class Url
     {
 
         $path = $this->path;
+        $path = rawurldecode(rtrim($path, "/") . "/");
+        
         if ($this->pathCompare($route->path, $path)) return true;
-        $path = rtrim($path, "/") . "/";
         if (!empty($route->parameters)) {
             $pattern = preg_replace("/\//", "\/", rtrim($route->path, "/") . "/");
             $pattern = "/^" . preg_replace("/\{.*?\}/m", "([^\/]+)", $pattern) . "$/";
