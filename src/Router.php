@@ -39,29 +39,39 @@ class Router implements Interceptor
      * @param array $options - options for router
      *              - *throwOnDuplicatePath*   default true
      *              - *autoDetectFolderOffset* default true
+     *              - *pathOffset*              default ""
      *
      * 
      */
     function __construct(array $interceptors = [], array $options = [])
     {
         $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
-        $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-        $file = null;
-        foreach ($traces as $trace) {
-            if (isset($trace['file'])) {
-                $file = $trace['file'];
-                break;
+
+        if (!isset($options['pathOffset'])) {   
+            $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+            $file = null;
+            foreach ($traces as $trace) {
+                if (isset($trace['file'])) {
+                    $file = $trace['file'];
+                    if (strtolower(basename($file)) === 'index.php') {
+                        $file = $trace['file'];
+                        break;
+                    }
+                }
             }
+
+            if (is_string($root) && is_string($file)) {
+                $root = preg_replace('/\\\\|\\//im', '/', $root);
+                $path = preg_replace('/\\\\|\\//im', '/', dirname($file));
+                $offset = str_replace($root, "", $path);
+                $this->routeOffset = $offset;
+            } else {
+                $this->routeOffset = "";
+            }
+        } else {
+            $this->routeOffset = $options['pathOffset'];
         }
 
-        if (is_string($root) && is_string($file)) {
-            $root = preg_replace('/\\\\|\\//im', '/', $root);
-            $path = preg_replace('/\\\\|\\//im', '/', dirname($file));
-            $offset = str_replace($root, "", $path);
-            $this->routeOffset = $offset;
-        } else {
-            $this->routeOffset = "";
-        }
 
         $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
         if (is_string($file) && !file_exists($htaccessFile)) {
@@ -120,8 +130,8 @@ EOS;
             if ($this->options["throwOnDuplicatePath"]) {
                 $duplicates = array_filter(
                     $this->routes,
-                    fn($route) => $route->path === $path 
-                    && $route->method === $obj->method
+                    fn($route) => $route->path === $path
+                        && $route->method === $obj->method
                 );
                 if (count($duplicates) > 0) throw new InvalidArgumentException("Cannot add path \"$obj->path\", same path already added in collection.");
             }
