@@ -172,31 +172,25 @@ EOS;
     {
 
         $routes = $this->routes;
-        // sort descending by path
         usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
         $uri = $request->uri;
-        // find match route
-        $route = array_values(array_filter($routes, fn($route) => $request->method === $route->method && $uri->matchRoute($route)));
+        $routes = array_values(array_filter($routes, fn($route) => $request->method === $route->method && $uri->matchRoute($route)));
         $response = new Response();
 
-        // if not found
-        if (empty($route)) {
+        if (empty($routes)) {
             $response->setCode(Code::NOT_FOUND);
         } else {
-            $request->set("__route", $route[0]);
-        }
-        // invoke interceptor
-        foreach ($this->interceptors as $interceptor) {
-            if ($interceptor->onDispatch($request, $response)) break;
+            $request->set("__route", $routes[0]);
         }
 
-        $executor = new MiddlewareExecutor($route[0]->middlewares ?? []);
-        $response = $executor($request, function () use ($response) {
+        $executor = new MiddlewareExecutor($routes[0]->middlewares ?? []);
+        return $executor($request, function () use ($request, $response) {
+            foreach ($this->interceptors as $interceptor) {
+                if ($interceptor->onDispatch($request, $response)) break;
+            }
             return $response;
         });
-
-        return $response;
     }
 
 
