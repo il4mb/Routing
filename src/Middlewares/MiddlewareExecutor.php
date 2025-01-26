@@ -43,7 +43,7 @@ class MiddlewareExecutor
     public function __invoke(Request $request, Closure $next): HttpResponse
     {
         // Start middleware execution from the last middleware in the stack
-        $next = $this->createNextClosure($next, count($this->middlewares) - 1);
+        $next = $this->createNextClosure($next, 0);
         return $next($request);
     }
 
@@ -57,7 +57,7 @@ class MiddlewareExecutor
     private function createNextClosure(Closure $default, int $index): Closure
     {
         return function (Request $request) use ($default, $index): HttpResponse {
-            if ($index < 0) {
+            if ($index >= count($this->middlewares)) {
                 // If there are no more middlewares, call the default handler
                 return $default($request);
             }
@@ -66,7 +66,7 @@ class MiddlewareExecutor
             $middleware = $this->middlewares[$index];
 
             // Recursively create the next closure for the next middleware
-            $next = $this->createNextClosure($default, $index - 1);
+            $next = $this->createNextClosure($default, $index + 1);
 
             // Call the middleware's handle method
             return $middleware->handle($request, $next);
