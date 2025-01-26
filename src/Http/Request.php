@@ -134,7 +134,7 @@ class Request
 
     function isContent(ContentType $accept)
     {
-        return in_array($accept->value, explode(",", $this->headers['Accept'] ?? ""));
+        return in_array($accept->value, explode(",", $this->headers['accept'] ?? ""));
     }
 
     private function parseMutipartBoundary()
