@@ -47,7 +47,7 @@ class Router implements Interceptor
     {
         $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
 
-        if (!isset($options['pathOffset'])) {   
+        if (!isset($options['pathOffset'])) {
             $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
             $file = null;
             foreach ($traces as $trace) {
@@ -75,14 +75,14 @@ class Router implements Interceptor
 
         $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
         if (is_string($file) && !file_exists($htaccessFile)) {
-            $fileName = rawurlencode(trim($this->routeOffset, "\/") . "/" . basename($file));
+            $fileName = trim($this->routeOffset, "\/") . "/" . basename($file);
             $htaccess = <<<EOS
 # THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
 # YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
 RewriteEngine on
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ /$fileName [NC,L,QSA]
+RewriteRule ^(.*)$ "/$fileName" [NC,L,QSA]
 EOS;
             file_put_contents($htaccessFile, $htaccess);
         }
