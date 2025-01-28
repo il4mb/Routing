@@ -35,6 +35,7 @@ class Request
         foreach ($_GET as $key => $value) {
             $this->props["__queries"][$key] = $value;
         }
+
         foreach ($_POST as $key => $value) {
             $this->props["__body"][$key] = $value;
         }
@@ -46,7 +47,9 @@ class Request
         }
 
         foreach ($_FILES as $key => $value) {
+            // Check if multiple files are uploaded for the same field
             if (is_array($value['name'])) {
+                // Iterate over the array of files and handle each one
                 foreach ($value['name'] as $index => $filename) {
                     $fileData = [
                         'type' => $value['type'][$index],
@@ -55,19 +58,25 @@ class Request
                         'size' => $value['size'][$index],
                         'error' => $value['error'][$index] ?? null
                     ];
+
+                    // Assign the file data to the __files array
                     if (!isset($this->props["__files"][$key])) {
                         $this->props["__files"][$key] = [];
                     }
                     $this->props["__files"][$key][] = $fileData;
                 }
             } else {
-                $this->props["__files"][$key] = [
+                // Single file upload case
+                $fileData = [
                     'type' => $value['type'],
                     'name' => $value['name'],
                     'tmp_name' => $value['tmp_name'],
                     'size' => $value['size'],
                     'error' => $value['error'] ?? null
                 ];
+
+                // Assign the file data to the __files array
+                $this->props["__files"][$key] = $fileData;
             }
         }
 
@@ -195,22 +204,14 @@ class Request
                     }
 
                     if (isset($headers['Content-Disposition'])) {
-
                         preg_match('/name="([^"]+)"/', $headers['Content-Disposition'], $nameMatch);
                         preg_match('/filename="([^"]+)"/', $headers['Content-Disposition'], $fileMatch);
 
                         $name = $nameMatch[1] ?? null;
                         $filename = $fileMatch[1] ?? null;
-                        $isArray = false;
-
-                        preg_match("/(.*?)\[.*?\]/", $name, $arrayMatch);
-                        if (isset($arrayMatch[1])) {
-                            $name = $arrayMatch[1];
-                            $isArray = true;
-                        }
-
 
                         if ($filename) {
+                            // Handle file uploads (unchanged)
                             $tempFilePath = tempnam(sys_get_temp_dir(), uniqid('upload_', true));
                             file_put_contents($tempFilePath, $body);
 
@@ -222,28 +223,13 @@ class Request
                                 'error' => null,
                             ];
 
-                            error_log(print_r($fileData, 1));
-
-                            if ($isArray) {
-                                // Handle multiple files with the same name
-                                if (!isset($this->props["__files"][$name])) {
-                                    $this->props["__files"][$name] = [];
-                                }
-                                $this->props["__files"][$name][] = $fileData;
-                            } else {
-                                $this->props["__files"][$name] = $fileData;
+                            if (!isset($this->props["__files"][$name])) {
+                                $this->props["__files"][$name] = [];
                             }
+                            $this->props["__files"][$name][] = $fileData;
                         } else {
                             // Handle form fields
-                            if (isset($this->props["__body"][$name])) {
-                                // Convert to an array if multiple values exist
-                                if (!is_array($this->props["__body"][$name])) {
-                                    $this->props["__body"][$name] = [$this->props["__body"][$name]];
-                                }
-                                $this->props["__body"][$name][] = trim($body);
-                            } else {
-                                $this->props["__body"][$name] = trim($body);
-                            }
+                            $this->parseNestedFormData($name, trim($body));
                         }
                     }
                 }
@@ -253,6 +239,33 @@ class Request
             foreach ($jsonArray as $key => $val) {
                 $this->props["__body"][$key] = $val;
             }
+        }
+    }
+
+    private function parseNestedFormData($name, $value)
+    {
+        // Parse nested array syntax (e.g., "bahan-bahan[0][harga]")
+        if (preg_match_all('/\[(.*?)\]/', $name, $matches)) {
+            $keys = $matches[1];
+            $baseKey = strtok($name, '['); // Get the base key (e.g., "bahan-bahan")
+
+            // Initialize the base key if it doesn't exist
+            if (!isset($this->props["__body"][$baseKey])) {
+                $this->props["__body"][$baseKey] = [];
+            }
+
+            // Build the nested array structure
+            $current = &$this->props["__body"][$baseKey];
+            foreach ($keys as $key) {
+                if (!isset($current[$key])) {
+                    $current[$key] = [];
+                }
+                $current = &$current[$key];
+            }
+            $current = $value;
+        } else {
+            // Handle non-nested fields
+            $this->props["__body"][$name] = $value;
         }
     }
 }
