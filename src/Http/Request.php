@@ -207,8 +207,10 @@ class Request
                         preg_match('/name="([^"]+)"/', $headers['Content-Disposition'], $nameMatch);
                         preg_match('/filename="([^"]+)"/', $headers['Content-Disposition'], $fileMatch);
 
-                        $name = preg_replace("/\[.*?\]/", "", $nameMatch[1] ?? "") ?? null;
+                        $name = $nameMatch[1] ?? null;
                         $filename = $fileMatch[1] ?? null;
+                        preg_match("/\[.*?\]/", $name, $arrayMatch);
+                        $isArray = !empty($arrayMatch);
 
                         if ($filename) {
                             $tempFilePath = tempnam(sys_get_temp_dir(), uniqid('upload_', true));
@@ -222,17 +224,16 @@ class Request
                                 'error' => null,
                             ];
 
-                            // Handle multiple files with the same name
-                            if (isset($this->props["__files"][$name])) {
-                                $old = ($this->props["__files"][$name] ?? []);
-                                if (array_is_list($old)) {
-                                    $this->props["__files"][$name] = [...$old, $fileData];
-                                } else {
-                                    $this->props["__files"][$name] = [$old, $fileData];
+                            if ($isArray) {
+                                // Handle multiple files with the same name
+                                if (!isset($this->props["__files"][$name])) {
+                                    $this->props["__files"][$name] = [];
                                 }
+                                $this->props["__files"][$name][] = $fileData;
                             } else {
                                 $this->props["__files"][$name] = $fileData;
                             }
+                            
                         } else {
                             // Handle form fields
                             if (isset($this->props["__body"][$name])) {
