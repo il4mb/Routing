@@ -208,16 +208,34 @@ EOS;
         usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
         $uri = $request->uri;
-        $routes = array_values(array_filter($routes, fn($route) => $request->method === $route->method && $uri->matchRoute($route)));
-        $response = new Response();
-
-        if (empty($routes)) {
-            $response->setCode(Code::NOT_FOUND);
-        } else {
-            $request->set("__route", $routes[0]);
+        // match routes by path where no parameters first
+        $matchRoutes = array_values(
+            array_filter(
+                $routes,
+                fn($route) =>  empty($route->parameters)
+                    && $request->method === $route->method
+                    && $uri->matchRoute($route)
+            )
+        );
+        
+        if (empty($matchRoutes)) {
+            $matchRoutes = array_values(
+                array_filter(
+                    $routes,
+                    fn($route) => $request->method === $route->method && $uri->matchRoute($route)
+                )
+            );
         }
 
-        $executor = new MiddlewareExecutor($routes[0]->middlewares ?? []);
+        $response = new Response();
+
+        if (empty($matchRoutes)) {
+            $response->setCode(Code::NOT_FOUND);
+        } else {
+            $request->set("__route", $matchRoutes[0]);
+        }
+
+        $executor = new MiddlewareExecutor($matchRoutes[0]->middlewares ?? []);
         return $executor($request, function () use ($request, $response) {
             foreach ($this->interceptors as $interceptor) {
                 if ($interceptor->onDispatch($request, $response)) break;
