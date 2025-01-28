@@ -209,8 +209,14 @@ class Request
 
                         $name = $nameMatch[1] ?? null;
                         $filename = $fileMatch[1] ?? null;
-                        preg_match("/\[.*?\]/", $name, $arrayMatch);
-                        $isArray = !empty($arrayMatch);
+                        $isArray = false;
+
+                        preg_match("/(.*?)\[.*?\]/", $name, $arrayMatch);
+                        if (isset($arrayMatch[1])) {
+                            $name = $arrayMatch[1];
+                            $isArray = true;
+                        }
+
 
                         if ($filename) {
                             $tempFilePath = tempnam(sys_get_temp_dir(), uniqid('upload_', true));
@@ -233,7 +239,6 @@ class Request
                             } else {
                                 $this->props["__files"][$name] = $fileData;
                             }
-                            
                         } else {
                             // Handle form fields
                             if (isset($this->props["__body"][$name])) {
