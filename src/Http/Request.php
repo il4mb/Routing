@@ -44,6 +44,7 @@ class Request
         foreach ($_COOKIE as $key => $value) {
             $this->props["__cookies"][$key] = $value;
         }
+
         foreach ($_FILES as $key => $value) {
             // Check if multiple files are uploaded for the same field
             if (is_array($value['name'])) {
@@ -54,6 +55,7 @@ class Request
                         'name' => $filename,
                         'tmp_name' => $value['tmp_name'][$index],
                         'size' => $value['size'][$index],
+                        'error' => $value['error'][$index] ?? null
                     ];
 
                     // Assign the file data to the __files array
@@ -69,6 +71,7 @@ class Request
                     'name' => $value['name'],
                     'tmp_name' => $value['tmp_name'],
                     'size' => $value['size'],
+                    'error' => $value['error'] ?? null
                 ];
 
                 // Assign the file data to the __files array
@@ -135,7 +138,10 @@ class Request
         return $this->props["__queries"][$name] ?? null;
     }
 
-    function getFile(string $name)
+    /**
+     * @return array<string>|array<string, array<string>>|null
+     */
+    function getFile(string $name): mixed
     {
         return $this->props["__files"][$name] ?? null;
     }
@@ -213,13 +219,20 @@ class Request
                                 'name' => $filename,
                                 'tmp_name' => $tempFilePath,
                                 'size' => strlen($body),
+                                'error' => null,
                             ];
 
                             // Handle multiple files with the same name
-                            if (!isset($this->props["__files"][$name])) {
-                                $this->props["__files"][$name] = [];
+                            if (isset($this->props["__files"][$name])) {
+                                $old = ($this->props["__files"][$name] ?? []);
+                                if (array_is_list($old)) {
+                                    $this->props["__files"][$name] = [...$old, $fileData];
+                                } else {
+                                    $this->props["__files"][$name] = [$old, $fileData];
+                                }
+                            } else {
+                                $this->props["__files"][$name] = $fileData;
                             }
-                            $this->props["__files"][$name][] = $fileData;
                         } else {
                             // Handle form fields
                             if (isset($this->props["__body"][$name])) {
