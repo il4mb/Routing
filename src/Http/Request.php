@@ -25,7 +25,7 @@ class Request
     {
 
         $this->method      = Method::tryFrom($_SERVER['REQUEST_METHOD'] ?? 'GET');
-        $this->uri         = new URL();
+        $this->uri         = new Url();
         $this->headers     = new ListPair(
             function_exists("getallheaders")
                 ? getallheaders()
