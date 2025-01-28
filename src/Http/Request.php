@@ -45,8 +45,37 @@ class Request
             $this->props["__cookies"][$key] = $value;
         }
         foreach ($_FILES as $key => $value) {
-            $this->props["__files"][$key] = $value;
+            // Check if multiple files are uploaded for the same field
+            if (is_array($value['name'])) {
+                // Iterate over the array of files and handle each one
+                foreach ($value['name'] as $index => $filename) {
+                    $fileData = [
+                        'type' => $value['type'][$index],
+                        'name' => $filename,
+                        'tmp_name' => $value['tmp_name'][$index],
+                        'size' => $value['size'][$index],
+                    ];
+
+                    // Assign the file data to the __files array
+                    if (!isset($this->props["__files"][$key])) {
+                        $this->props["__files"][$key] = [];
+                    }
+                    $this->props["__files"][$key][] = $fileData;
+                }
+            } else {
+                // Single file upload case
+                $fileData = [
+                    'type' => $value['type'],
+                    'name' => $value['name'],
+                    'tmp_name' => $value['tmp_name'],
+                    'size' => $value['size'],
+                ];
+
+                // Assign the file data to the __files array
+                $this->props["__files"][$key] = [$fileData];
+            }
         }
+
 
         // clear state
         $_GET    = [];
@@ -152,11 +181,12 @@ class Request
             if ($boundary) {
                 $parts = explode('--' . $boundary, $rawBody);
                 foreach ($parts as $part) {
-
                     if (empty(trim($part)) || $part === '--') continue;
+
                     $block = explode("\r\n\r\n", $part, 2);
                     if (empty($block) || count($block) < 2) continue;
                     [$rawHeaders, $body] = $block;
+
                     $rawHeaders = explode("\r\n", $rawHeaders);
                     $headers = [];
                     foreach ($rawHeaders as $header) {
@@ -165,22 +195,42 @@ class Request
                             $headers[trim($key)] = trim($value);
                         }
                     }
+
                     if (isset($headers['Content-Disposition'])) {
+
                         preg_match('/name="([^"]+)"/', $headers['Content-Disposition'], $nameMatch);
                         preg_match('/filename="([^"]+)"/', $headers['Content-Disposition'], $fileMatch);
-                        $name = $nameMatch[1] ?? null;
+
+                        $name = preg_replace("/\[.*?\]/", "", $nameMatch[1] ?? "") ?? null;
                         $filename = $fileMatch[1] ?? null;
+
                         if ($filename) {
                             $tempFilePath = tempnam(sys_get_temp_dir(), uniqid('upload_', true));
                             file_put_contents($tempFilePath, $body);
-                            $this->props["__files"][$name] = [
+
+                            $fileData = [
                                 'type' => $headers['Content-Type'] ?? 'application/octet-stream',
                                 'name' => $filename,
                                 'tmp_name' => $tempFilePath,
                                 'size' => strlen($body),
                             ];
+
+                            // Handle multiple files with the same name
+                            if (!isset($this->props["__files"][$name])) {
+                                $this->props["__files"][$name] = [];
+                            }
+                            $this->props["__files"][$name][] = $fileData;
                         } else {
-                            $this->props["__body"][$name] = trim($body);
+                            // Handle form fields
+                            if (isset($this->props["__body"][$name])) {
+                                // Convert to an array if multiple values exist
+                                if (!is_array($this->props["__body"][$name])) {
+                                    $this->props["__body"][$name] = [$this->props["__body"][$name]];
+                                }
+                                $this->props["__body"][$name][] = trim($body);
+                            } else {
+                                $this->props["__body"][$name] = trim($body);
+                            }
                         }
                     }
                 }
