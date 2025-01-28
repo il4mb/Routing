@@ -45,60 +45,93 @@ class Router implements Interceptor
      */
     function __construct(array $interceptors = [], array $options = [])
     {
-        $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
 
-        if (!isset($options['pathOffset'])) {
-            $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-            $file = null;
-            foreach ($traces as $trace) {
-                if (isset($trace['file'])) {
-                    $file = $trace['file'];
-                    if (strtolower(basename($file)) === 'index.php') {
-                        $file = $trace['file'];
-                        break;
-                    }
-                }
-            }
-
-            if (is_string($root) && is_string($file)) {
-                $root = preg_replace('/\\\\|\\//im', '/', $root);
-                $path = preg_replace('/\\\\|\\//im', '/', dirname($file));
-                $offset = str_replace($root, "", $path);
-                $this->routeOffset = $offset;
-            } else {
-                $this->routeOffset = "";
-            }
-        } else {
-            $this->routeOffset = $options['pathOffset'];
-        }
-
-
-        $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
-        if (is_string($file) && !file_exists($htaccessFile)) {
-            $fileName = trim($this->routeOffset, "\/") . "/" . basename($file);
-            $htaccess = <<<EOS
-# THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
-# YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
-RewriteEngine on
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ "/$fileName" [NC,L,QSA]
-EOS;
-            file_put_contents($htaccessFile, $htaccess);
-        }
-
-
+        $this->initOption($options);
         $this->interceptors = [
             $this,
             ...$interceptors
         ];
         $this->routes = [];
+    }
+
+    private function initOption(array $options = [])
+    {
+        $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
+
+        /**
+         * Find Path Offset
+         */
+        if (!isset($options['pathOffset'])) {
+            $scriptName = $_SERVER['SCRIPT_NAME'] ?? false;
+            if ($scriptName) {
+                $this->routeOffset = dirname(trim($scriptName));
+            } else {
+                $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+                $file = null;
+                foreach ($traces as $trace) {
+                    if (isset($trace['file'])) {
+                        $file = $trace['file'];
+                        if (strtolower(basename($file)) === 'index.php') {
+                            $file = $trace['file'];
+                            break;
+                        }
+                    }
+                }
+
+                if (is_string($root) && is_string($file)) {
+                    $root = preg_replace('/\\\\|\\//im', '/', $root);
+                    $path = preg_replace('/\\\\|\\//im', '/', dirname($file));
+                    $offset = str_replace($root, "", $path);
+                    $this->routeOffset = $offset;
+                } else {
+                    $this->routeOffset = "";
+                }
+            }
+        } else {
+            $this->routeOffset = $options['pathOffset'];
+        }
+
+        // Control .htaccess file
+        $this->controlHtaccess($root);
+
+        // Set options
         $this->options = [
             "throwOnDuplicatePath" => true,
             "autoDetectFolderOffset" => true,
             ...$options
         ];
     }
+
+    private function controlHtaccess($root)
+    {
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? false;
+        if (!$scriptName) return;
+
+        $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
+        if (!file_exists($htaccessFile)) {
+            $htaccess = <<<EOS
+# THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
+# YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
+RewriteEngine on
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ "/$scriptName" [NC,L,QSA]
+EOS;
+            file_put_contents($htaccessFile, $htaccess);
+        } else {
+            $htaccess = file_get_contents($htaccessFile);
+            preg_match("/RewriteRule\s+(.*)\s+\[/im", $htaccess, $matches);
+            if (isset($matches[1])) {
+                $should = "^(.*)$ \"$scriptName\"";
+                if ($matches[1] !== $should) {
+                    $htaccess = str_replace($matches[1], $should, $htaccess);
+                    file_put_contents($htaccessFile, $htaccess);
+                    header("Refresh: 0");
+                }
+            }
+        }
+    }
+
 
     function removeInterceptor(Interceptor $interceptor)
     {
