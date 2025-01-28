@@ -46,9 +46,7 @@ class Request
         }
 
         foreach ($_FILES as $key => $value) {
-            // Check if multiple files are uploaded for the same field
             if (is_array($value['name'])) {
-                // Iterate over the array of files and handle each one
                 foreach ($value['name'] as $index => $filename) {
                     $fileData = [
                         'type' => $value['type'][$index],
@@ -57,25 +55,19 @@ class Request
                         'size' => $value['size'][$index],
                         'error' => $value['error'][$index] ?? null
                     ];
-
-                    // Assign the file data to the __files array
                     if (!isset($this->props["__files"][$key])) {
                         $this->props["__files"][$key] = [];
                     }
                     $this->props["__files"][$key][] = $fileData;
                 }
             } else {
-                // Single file upload case
-                $fileData = [
+                $this->props["__files"][$key] = [
                     'type' => $value['type'],
                     'name' => $value['name'],
                     'tmp_name' => $value['tmp_name'],
                     'size' => $value['size'],
                     'error' => $value['error'] ?? null
                 ];
-
-                // Assign the file data to the __files array
-                $this->props["__files"][$key] = [$fileData];
             }
         }
 
