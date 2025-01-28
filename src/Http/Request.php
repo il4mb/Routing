@@ -222,6 +222,8 @@ class Request
                                 'error' => null,
                             ];
 
+                            error_log(print_r($fileData, 1));
+
                             if ($isArray) {
                                 // Handle multiple files with the same name
                                 if (!isset($this->props["__files"][$name])) {
