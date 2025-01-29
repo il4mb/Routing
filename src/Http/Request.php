@@ -21,7 +21,9 @@ class Request
     public readonly Url $uri;
     public readonly ListPair $headers;
 
-    function __construct()
+    function __construct($options = [
+        "clearState" => true
+    ])
     {
 
         $this->method      = Method::tryFrom($_SERVER['REQUEST_METHOD'] ?? 'GET');
@@ -80,12 +82,13 @@ class Request
             }
         }
 
-
-        // clear state
-        $_GET    = [];
-        $_POST   = [];
-        $_COOKIE = [];
-        $_FILES  = [];
+        if (isset($options['clearState']) && $options['clearState'] == true) {
+            // clear state
+            $_GET    = [];
+            $_POST   = [];
+            $_COOKIE = [];
+            $_FILES  = [];
+        }
     }
 
     /**
@@ -182,9 +185,11 @@ class Request
     {
         $rawBody = file_get_contents('php://input');
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+
         if (strpos($contentType, 'multipart/form-data') !== false) {
             preg_match('/boundary=(.*)$/', $contentType, $matches);
             $boundary = $matches[1] ?? null;
+
             if ($boundary) {
                 $parts = explode('--' . $boundary, $rawBody);
                 foreach ($parts as $part) {
@@ -211,7 +216,7 @@ class Request
                         $filename = $fileMatch[1] ?? null;
 
                         if ($filename) {
-                            // Handle file uploads (unchanged)
+                            // Handle file uploads properly
                             $tempFilePath = tempnam(sys_get_temp_dir(), uniqid('upload_', true));
                             file_put_contents($tempFilePath, $body);
 
@@ -223,10 +228,17 @@ class Request
                                 'error' => null,
                             ];
 
-                            if (!isset($this->props["__files"][$name])) {
-                                $this->props["__files"][$name] = [];
+                            if (strpos($name, '[]') !== false) {
+                                // Handle list of files
+                                $name = str_replace('[]', '', $name); // Remove [] from name
+                                if (!isset($this->props["__files"][$name])) {
+                                    $this->props["__files"][$name] = [];
+                                }
+                                $this->props["__files"][$name][] = $fileData;
+                            } else {
+                                // Single file input
+                                $this->props["__files"][$name] = $fileData;
                             }
-                            $this->props["__files"][$name][] = $fileData;
                         } else {
                             // Handle form fields
                             $this->parseNestedFormData($name, trim($body));
@@ -241,6 +253,7 @@ class Request
             }
         }
     }
+
 
     private function parseNestedFormData($name, $value)
     {
