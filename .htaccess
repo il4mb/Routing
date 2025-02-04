@@ -3,4 +3,4 @@
 RewriteEngine on
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ /Routing/index.php [NC,L,QSA]
+RewriteRule ^(.*)$ "/Routing/index.php" [NC,L,QSA]

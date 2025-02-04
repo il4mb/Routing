@@ -49,6 +49,6 @@ class Controller
 
 
 $router = new Router();
-$router->addRoute(new Controller());
+$router->addRouteBy("/", new Controller());
 $response = $router->dispatch(new Request());
 echo $response->send();
