@@ -128,7 +128,7 @@ EOS;
 
     private function addRouteInternal(Route $route, string $basepath = ''): void
     {
-        $path = "/" . trim($basepath, "\/") . "/" . trim($this->routeOffset, "\/") . "/" . trim($route->path, "\/");
+        $path = "/" . trim($this->routeOffset, "\/") . "/" . trim($basepath, "\/") . "/" . trim($route->path, "\/");
 
         if ($this->options["throwOnDuplicatePath"]) {
             $duplicates = array_filter(
