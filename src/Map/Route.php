@@ -127,10 +127,10 @@ class RouteParam
      * @var mixed $flag - The flag associated with the parameter.
      */
     public mixed $flag;
-    public function __construct(string $name, array $expacted = [], mixed $flag)
+    public function __construct(string $name, array $expacted, mixed $flag)
     {
         $this->name     = $name;
-        $this->expacted = $expacted;
+        $this->expacted = $expacted ?? [];
         $this->flag   = $flag;
     }
 
