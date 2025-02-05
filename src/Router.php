@@ -183,6 +183,10 @@ EOS;
         $routes = $this->routes;
         usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
+        $request->set("__route_options", [
+            "pathOffset" => $this->routeOffset,
+            ...$this->options
+        ]);
         $uri = $request->uri;
         $nonBrancesRoutes = array_filter($routes, fn(Route $route) => empty($route->parameters));
         $brancesRoutes = array_filter($routes, fn(Route $route) => count($route->parameters) > 0);
