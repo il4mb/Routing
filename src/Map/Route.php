@@ -99,6 +99,7 @@ class Route
 class RouteParam
 {
     public readonly string $name;
+    public readonly string $value;
     private readonly array $expacted;
     public function __construct(string $name, array $expacted = [])
     {

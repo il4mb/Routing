@@ -128,8 +128,10 @@ EOS;
 
     private function addRouteInternal(Route $route, string $basepath = ''): void
     {
-        $path = "/" . trim($this->routeOffset, "\/") . "/" . trim($basepath, "\/") . "/" . trim($route->path, "\/");
-
+        $basepath   = trim($basepath, "\/");
+        $offsetpath = trim($this->routeOffset, "\/");
+        $path = (!empty($offsetpath) ? "/$offsetpath" : "") . (!empty($basepath) ? "/$basepath" : "") . "/" .  trim($route->path, "\/");
+       
         if ($this->options["throwOnDuplicatePath"]) {
             $duplicates = array_filter(
                 $this->routes,
@@ -171,13 +173,22 @@ EOS;
         }
     }
 
+    /**
+     * Dispath registered route by request
+     */
     public function dispatch(Request $request): Response
     {
         $routes = $this->routes;
         usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
         $uri = $request->uri;
-        $routes = array_values(array_filter($routes, fn($route) => $request->method === $route->method && $uri->matchRoute($route)));
+        $routes = array_values(
+            array_filter(
+                $routes,
+                fn($route) => $request->method === $route->method
+                    && $uri->matchRoute($route)
+            )
+        );
         $response = new Response();
 
         if (empty($routes)) {
