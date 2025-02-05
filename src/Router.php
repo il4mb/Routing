@@ -130,8 +130,10 @@ EOS;
     {
         $basepath   = trim($basepath, "\/");
         $offsetpath = trim($this->routeOffset, "\/");
-        $path = (!empty($offsetpath) ? "/$offsetpath" : "") . (!empty($basepath) ? "/$basepath" : "") . "/" .  trim($route->path, "\/");
-       
+        $path = (!empty($offsetpath) ? "/$offsetpath" : "")
+            . (!empty($basepath) ? "/$basepath" : "") . "/"
+            .  trim($route->path, "\/");
+
         if ($this->options["throwOnDuplicatePath"]) {
             $duplicates = array_filter(
                 $this->routes,

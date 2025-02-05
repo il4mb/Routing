@@ -9,9 +9,22 @@ use Il4mb\Routing\Http\Method;
 #[Attribute(Attribute::TARGET_METHOD)]
 class Route
 {
+    /**
+     * @var Method $method
+     */
     public readonly Method $method;
+    /**
+     * @var string $path
+     */
     public readonly string $path;
+
+    /**
+     * @var array<\Il4mb\Routing\Middlewares\Middleware> $middlewares
+     */
     public readonly array $middlewares;
+    /**
+     * @var array<\Il4mb\Routing\Map\RouteParam> $parameters
+     */
     public readonly array $parameters;
     public readonly ?Callback $callback;
 
@@ -42,12 +55,12 @@ class Route
     private function extractParameters(string $path): array
     {
         $parameters = [];
-        preg_match_all('/\{(\w+)(?:\[([^\]]+)\])?\}/', $path, $matches, PREG_SET_ORDER);
-
+        preg_match_all('/\{(\w+)(?:\[([^\]]+)\])?(|.)\}/', $path, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
             $name = $match[1];
-            $expected = isset($match[2]) ? explode(',', $match[2]) : [];
-            $parameters[] = new RouteParam($name, $expected);
+            $expected = explode(',', $match[2] ?? "") ?? [];
+            $flag = $match[3] ?? null;
+            $parameters[] = new RouteParam($name, $expected, $flag);
         }
 
         return $parameters;
@@ -98,13 +111,27 @@ class Route
 
 class RouteParam
 {
-    public readonly string $name;
-    public readonly string $value;
-    private readonly array $expacted;
-    public function __construct(string $name, array $expacted = [])
+    /**
+     * @var string $name - The name of the parameter.
+     */
+    public ?string $name = null;
+    /**
+     * @var string $value - The value of the parameter.
+     */
+    public ?string $value = null;
+    /**
+     * @var array<string> $expacted - The expected values for the parameter.
+     */
+    private array $expacted = [];
+    /**
+     * @var mixed $flag - The flag associated with the parameter.
+     */
+    public mixed $flag;
+    public function __construct(string $name, array $expacted = [], mixed $flag)
     {
-        $this->name  = $name;
+        $this->name     = $name;
         $this->expacted = $expacted;
+        $this->flag   = $flag;
     }
 
     function hasExpacted(): bool
@@ -115,5 +142,15 @@ class RouteParam
     function isExpacted($value): bool
     {
         return in_array($value, $this->expacted);
+    }
+
+    function __debugInfo()
+    {
+        return [
+            "name" => $this->name,
+            "value" => $this->value,
+            "expacted" => $this->expacted,
+            "flag" => $this->flag
+        ];
     }
 }

@@ -3,6 +3,7 @@
 namespace Il4mb\Routing\Http;
 
 use Il4mb\Routing\Map\Route;
+use Il4mb\Routing\Map\RouteParam;
 
 class Url
 {
@@ -51,37 +52,44 @@ class Url
 
     function matchRoute(Route $route)
     {
-
-        $path = $this->path;
-        $path = rawurldecode(rtrim($path, "/") . "/");
-        
+        $path = rawurldecode(rtrim($this->path, "/") . "/");
         if ($this->pathCompare($route->path, $path)) return true;
-        if (!empty($route->parameters)) {
-            $pattern = preg_replace("/\//", "\/", rtrim($route->path, "/") . "/");
-            $pattern = "/^" . preg_replace("/\{.*?\}/m", "([^\/]+)", $pattern) . "$/";
-            preg_match($pattern, $path, $matches);
-            if (!empty($matches)) {
-                unset($matches[0]);
-                $matches = array_values($matches);
-                foreach ($route->parameters as $key => $param) {
-                    $value = $matches[$key] ?? null;
-                    if ($param->hasExpacted()) {
-                        if (!$param->isExpacted($value)) {
-                            return false;
-                        }
-                    }
-                    $reflector = new \ReflectionClass($param);
-                    $propValue = $reflector->getProperty("value");
-                    $propValue->setAccessible(true);
-                    $propValue->setValue($param, $value);
-                    $propValue->setAccessible(false);
-                }
-                if (count($matches) == count($route->parameters)) {
-                    return true;
-                }
-            }
+        if (empty($route->parameters)) return false;
+
+        $parameters = $route->parameters;
+        $isWildcard = isset($parameters[0]) && $parameters[0]->flag === "*";
+        $pattern = $this->buildPattern($route->path, $isWildcard);
+
+        if (!preg_match($pattern, $path, $matches)) return false;
+        array_shift($matches);
+
+        if ($isWildcard) {
+            $this->setRouteParamValue($parameters[0], $matches[0] ?? null);
+            return true;
         }
-        return false;
+
+        foreach ($parameters as $key => $param) {
+            $value = $matches[$key] ?? null;
+            if ($param->hasExpacted() && !$param->isExpacted($value)) return false;
+            $this->setRouteParamValue($param, $value);
+        }
+
+        return count($matches) === count($parameters);
+    }
+
+    private function buildPattern(string $routePath, bool $isWildcard): string
+    {
+        $pattern = preg_replace("/\//", "\/", rtrim($routePath, "/") . "/");
+        return "/^" . preg_replace("/\{.*?\}/m", $isWildcard ? "(.*)" : "([^\/]+)", $pattern) . "$/";
+    }
+
+    private function setRouteParamValue(RouteParam $param, mixed $value): void
+    {
+        $reflector = new \ReflectionClass($param);
+        $propValue = $reflector->getProperty("value");
+        $propValue->setAccessible(true);
+        $propValue->setValue($param, $value);
+        $propValue->setAccessible(false);
     }
 
     private function pathCompare(string $path1, string $path2): bool

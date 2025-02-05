@@ -6,17 +6,17 @@ use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Router;
 
 ini_set("log_errors", 1);
-ini_set("error_log", "php-error.log");
+ini_set("error_log", "error.log");
 
 require_once __DIR__ . "/vendor/autoload.php";
 
 class Controller
 {
 
-    #[Route(Method::GET, "/")]
-    function get()
+    #[Route(Method::GET, "/{path*}")]
+    function get($path)
     {
-        return ["From Get"];
+        return ["From Get", $path];
     }
 
     #[Route(Method::GET, "/hallo")]
