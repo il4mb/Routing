@@ -30,4 +30,9 @@ enum ContentType: string
     case GZIP = "application/gzip";
     case TAR = "application/x-tar";
     case RAR = "application/vnd.rar";
+
+    function __toString()
+    {
+        return $this->value;
+    }
 }
