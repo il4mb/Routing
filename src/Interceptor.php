@@ -20,5 +20,5 @@ interface Interceptor
 
     function onDispatch(Request &$request, Response &$response): bool;
     
-    function onFailed(Throwable $t, Request &$request, Response &$response);
+    function onFailed(Throwable $t, Request &$request, Response &$response): bool;
 }

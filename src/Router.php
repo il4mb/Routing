@@ -250,7 +250,7 @@ EOS;
             }
         } catch (Throwable $t) {
             foreach ($this->interceptors as $interceptor) {
-                if($interceptor->onFailed($t, $request, $response)) break;
+                if ($interceptor->onFailed($t, $request, $response)) break;
             }
         }
         return false;
@@ -269,7 +269,7 @@ EOS;
         }
     }
 
-    function onFailed(Throwable $t, Request &$request, Response &$response)
+    function onFailed(Throwable $t, Request &$request, Response &$response): bool
     {
         return false;
     }
