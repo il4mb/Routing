@@ -184,22 +184,31 @@ EOS;
         usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
         $uri = $request->uri;
-        $routes = array_values(
-            array_filter(
-                $routes,
-                fn($route) => $request->method === $route->method
-                    && $uri->matchRoute($route)
-            )
+        $nonBrancesRoutes = array_filter($routes, fn(Route $route) => empty($route->parameters));
+
+        $mathedRoutes = array_filter(
+            $nonBrancesRoutes,
+            fn(Route $route) => $request->method === $route->method
+                && $uri->matchRoute($route)
         );
+        if (empty($mathedRoutes)) {
+            $mathedRoutes = array_values(
+                array_filter(
+                    $mathedRoutes,
+                    fn(Route $route) => $request->method === $route->method
+                        && $uri->matchRoute($route)
+                )
+            );
+        }
         $response = new Response();
 
-        if (empty($routes)) {
+        if (empty($mathedRoutes)) {
             $response->setCode(Code::NOT_FOUND);
             return $response;
         }
 
-        $request->set("__route", $routes[0]);
-        $executor = new MiddlewareExecutor($routes[0]->middlewares ?? []);
+        $request->set("__route", $mathedRoutes[0]);
+        $executor = new MiddlewareExecutor($mathedRoutes[0]->middlewares ?? []);
 
         return $executor($request, function () use ($request, $response) {
             foreach ($this->interceptors as $interceptor) {
