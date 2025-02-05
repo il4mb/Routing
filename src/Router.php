@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use ReflectionClass;
 use Il4mb\Routing\Map\Route;
 use Il4mb\Routing\Middlewares\MiddlewareExecutor;
+use Throwable;
 
 class Router implements Interceptor
 {
@@ -242,9 +243,15 @@ EOS;
 
     public function onDispatch(Request &$request, Response &$response): bool
     {
-        $route = $request->get("__route", Route::class);
-        if ($route && $route->callback) {
-            $this->invokeRoute($route, $request, $response);
+        try {
+            $route = $request->get("__route", Route::class);
+            if ($route && $route->callback) {
+                $this->invokeRoute($route, $request, $response);
+            }
+        } catch (Throwable $t) {
+            foreach ($this->interceptors as $interceptor) {
+                if($interceptor->onFailed($t, $request, $response)) break;
+            }
         }
         return false;
     }
@@ -260,6 +267,11 @@ EOS;
         foreach ($this->interceptors as $interceptor) {
             if ($interceptor->onInvoke($route)) break;
         }
+    }
+
+    function onFailed(Throwable $t, Request &$request, Response &$response)
+    {
+        return false;
     }
 
     public function __debugInfo()
