@@ -55,14 +55,13 @@ class Route
     private function extractParameters(string $path): array
     {
         $parameters = [];
-        preg_match_all('/\{(\w+)(?:\[([^\]]+)\])?(|.)\}/', $path, $matches, PREG_SET_ORDER);
+        preg_match_all('/\{(\w+)(?:\[([^\]]+)\])?(|\.\*)\}/', $path, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
             $name = $match[1];
             $expected = explode(',', $match[2] ?? "") ?? [];
             $flag = $match[3] ?? null;
             $parameters[] = new RouteParam($name, $expected, $flag);
         }
-
         return $parameters;
     }
 

@@ -185,16 +185,19 @@ EOS;
 
         $uri = $request->uri;
         $nonBrancesRoutes = array_filter($routes, fn(Route $route) => empty($route->parameters));
+        $brancesRoutes = array_filter($routes, fn(Route $route) => count($route->parameters) > 0);
 
-        $mathedRoutes = array_filter(
-            $nonBrancesRoutes,
-            fn(Route $route) => $request->method === $route->method
-                && $uri->matchRoute($route)
+        $mathedRoutes = array_values(
+            array_filter(
+                $nonBrancesRoutes,
+                fn(Route $route) => $request->method === $route->method
+                    && $uri->matchRoute($route)
+            )
         );
-        if (empty($mathedRoutes)) {
+        if (count($mathedRoutes) < 1) {
             $mathedRoutes = array_values(
                 array_filter(
-                    $mathedRoutes,
+                    $brancesRoutes,
                     fn(Route $route) => $request->method === $route->method
                         && $uri->matchRoute($route)
                 )

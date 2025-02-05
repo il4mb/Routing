@@ -55,9 +55,8 @@ class Url
         $path = rawurldecode(rtrim($this->path, "/") . "/");
         if ($this->pathCompare($route->path, $path)) return true;
         if (empty($route->parameters)) return false;
-
         $parameters = $route->parameters;
-        $isWildcard = isset($parameters[0]) && $parameters[0]->flag === "*";
+        $isWildcard = isset($parameters[0]) && $parameters[0]->flag === ".*";
         $pattern = $this->buildPattern($route->path, $isWildcard);
 
         if (!preg_match($pattern, $path, $matches)) return false;

@@ -13,7 +13,7 @@ require_once __DIR__ . "/vendor/autoload.php";
 class Controller
 {
 
-    #[Route(Method::GET, "/{path*}")]
+    #[Route(Method::GET, "/{path.*}")]
     function get($path)
     {
         return ["From Get", $path];
@@ -49,6 +49,6 @@ class Controller
 
 
 $router = new Router();
-$router->addRouteBy("/", new Controller());
+$router->addRoute(new Controller());
 $response = $router->dispatch(new Request());
 echo $response->send();
