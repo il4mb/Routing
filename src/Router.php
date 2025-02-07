@@ -227,7 +227,7 @@ EOS;
             $response->setCode(Code::fromCode($t->getCode()) ?? 500);
             $response->setContent($t->getMessage());
             foreach ($this->interceptors as $interceptor) {
-                if ($interceptor->onFailed($request, $response)) break;
+                if ($interceptor->onFailed($t, $request, $response)) break;
             }
         }
         return $response;
