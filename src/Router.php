@@ -2,6 +2,7 @@
 
 namespace Il4mb\Routing;
 
+use Exception;
 use Il4mb\Routing\Http\Code;
 use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Http\Response;
@@ -181,52 +182,54 @@ EOS;
      */
     public function dispatch(Request $request): Response
     {
-        $routes = $this->routes;
-        usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
+        $response = new Response();
+        try {
+            $routes = $this->routes;
+            usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
-        $request->set("__route_options", [
-            "pathOffset" => $this->routeOffset,
-            ...$this->options
-        ]);
-        $uri = $request->uri;
-        $nonBrancesRoutes = array_filter($routes, fn(Route $route) => empty($route->parameters));
-        $brancesRoutes = array_filter($routes, fn(Route $route) => count($route->parameters) > 0);
+            $request->set("__route_options", [
+                "pathOffset" => $this->routeOffset,
+                ...$this->options
+            ]);
+            $uri = $request->uri;
+            $nonBrancesRoutes = array_filter($routes, fn(Route $route) => empty($route->parameters));
+            $brancesRoutes = array_filter($routes, fn(Route $route) => count($route->parameters) > 0);
 
-        $mathedRoutes = array_values(
-            array_filter(
-                $nonBrancesRoutes,
-                fn(Route $route) => $request->method === $route->method
-                    && $uri->matchRoute($route)
-            )
-        );
-        if (count($mathedRoutes) < 1) {
             $mathedRoutes = array_values(
                 array_filter(
-                    $brancesRoutes,
+                    $nonBrancesRoutes,
                     fn(Route $route) => $request->method === $route->method
                         && $uri->matchRoute($route)
                 )
             );
-        }
-        $response = new Response();
+            if (count($mathedRoutes) < 1) {
+                $mathedRoutes = array_values(
+                    array_filter(
+                        $brancesRoutes,
+                        fn(Route $route) => $request->method === $route->method
+                            && $uri->matchRoute($route)
+                    )
+                );
+            }
 
-        if (empty($mathedRoutes)) {
-            $response->setCode(Code::NOT_FOUND);
+
+            if (empty($mathedRoutes)) throw new Exception("Route not found.", 404);
+            $request->set("__route", $mathedRoutes[0]);
+            $executor = new MiddlewareExecutor($mathedRoutes[0]->middlewares ?? []);
+
+            return $executor($request, function () use ($request, $response) {
+                foreach ($this->interceptors as $interceptor) {
+                    if ($interceptor->onDispatch($request, $response)) break;
+                }
+                return $response;
+            });
+        } catch (Throwable $t) {
+            $response->setCode(Code::fromCode($t->getCode()) ?? 500);
             foreach ($this->interceptors as $interceptor) {
                 if ($interceptor->onFailed($request, $response)) break;
             }
-            return $response;
         }
-
-        $request->set("__route", $mathedRoutes[0]);
-        $executor = new MiddlewareExecutor($mathedRoutes[0]->middlewares ?? []);
-
-        return $executor($request, function () use ($request, $response) {
-            foreach ($this->interceptors as $interceptor) {
-                if ($interceptor->onDispatch($request, $response)) break;
-            }
-            return $response;
-        });
+        return $response;
     }
 
     public function onAddRoute(Route &$route): bool
