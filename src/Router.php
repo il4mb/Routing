@@ -225,6 +225,7 @@ EOS;
             });
         } catch (Throwable $t) {
             $response->setCode(Code::fromCode($t->getCode()) ?? 500);
+            $response->setContent($t->getMessage());
             foreach ($this->interceptors as $interceptor) {
                 if ($interceptor->onFailed($request, $response)) break;
             }
