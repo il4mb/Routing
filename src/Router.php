@@ -212,6 +212,9 @@ EOS;
 
         if (empty($mathedRoutes)) {
             $response->setCode(Code::NOT_FOUND);
+            foreach ($this->interceptors as $interceptor) {
+                if ($interceptor->onFailed($request, $response)) break;
+            }
             return $response;
         }
 
