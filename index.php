@@ -3,47 +3,33 @@
 use Il4mb\Routing\Map\Route;
 use Il4mb\Routing\Http\Method;
 use Il4mb\Routing\Http\Request;
+use Il4mb\Routing\Middlewares\Middleware;
 use Il4mb\Routing\Router;
 
 ini_set("log_errors", 1);
 ini_set("error_log", "error.log");
 
 require_once __DIR__ . "/vendor/autoload.php";
-
+class Middle implements Middleware
+{
+    function handle(Request $request, Closure $next)
+    {
+    }
+}
 class Controller
 {
 
-    #[Route(Method::GET, "/{path.*}")]
-    function get($path)
+    #[Route(Method::GET, "/{path.*}", middlewares: [Middle::class])]
+    function get($path, Closure $next)
     {
+        return $next();
         return ["From Get", $path];
     }
 
-    #[Route(Method::GET, "/hallo")]
-    function get1()
+    #[Route(Method::GET, "/hallo/{world}")]
+    function get13($world)
     {
-        return ["Halllo From Halaman Hallo"];
-    }
-
-
-    #[Route(Method::POST, "/")]
-    function post(Request $req)
-    {
-        echo json_encode($req->get("*"));
-        return ["From Post"];
-    }
-
-    #[Route(Method::PUT, "/{adios}/")]
-    function put(Request $req, $adios, $adios1)
-    {
-        $req->set("view", 135);
-        return ["Ini Kontent"];
-    }
-
-    #[Route(Method::DELETE, "/*")]
-    function delete()
-    {
-        return ["From Delete"];
+        return ["Halllo From Halaman " . $world];
     }
 }
 

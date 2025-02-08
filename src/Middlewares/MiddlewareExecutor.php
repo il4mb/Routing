@@ -5,6 +5,7 @@ namespace Il4mb\Routing\Middlewares;
 use Closure;
 use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Http\Response as HttpResponse;
+use Il4mb\Routing\Map\Route;
 use ReflectionClass;
 
 class MiddlewareExecutor
@@ -40,10 +41,11 @@ class MiddlewareExecutor
      * @param \Closure $next
      * @return \Il4mb\Routing\Http\Response
      */
-    public function __invoke(Request $request, Closure $next): HttpResponse
+    public function __invoke(Request $request)
     {
-        // Start middleware execution from the last middleware in the stack
-        $next = $this->createNextClosure($next, 0);
+        $next = $this->createNextClosure(function () use ($request) {
+            return $request;
+        }, 0);
         return $next($request);
     }
 
@@ -56,7 +58,7 @@ class MiddlewareExecutor
      */
     private function createNextClosure(Closure $default, int $index): Closure
     {
-        return function (Request $request) use ($default, $index): HttpResponse {
+        return function (Request $request) use ($default, $index) {
             if ($index >= count($this->middlewares)) {
                 // If there are no more middlewares, call the default handler
                 return $default($request);
@@ -71,5 +73,11 @@ class MiddlewareExecutor
             // Call the middleware's handle method
             return $middleware->handle($request, $next);
         };
+    }
+
+    static function execute(Route $route, Request $request): void
+    {
+        $executor = new static($route->middlewares ?? []);
+        $executor($request);
     }
 }

@@ -129,7 +129,7 @@ class RouteParam
     public function __construct(string $name, array $expacted, mixed $flag)
     {
         $this->name     = $name;
-        $this->expacted = $expacted ?? [];
+        $this->expacted = array_values(array_filter($expacted ?? []));
         $this->flag   = $flag;
     }
 

@@ -52,6 +52,7 @@ class Url
 
     function matchRoute(Route $route)
     {
+
         $path = rawurldecode(rtrim($this->path, "/") . "/");
         if ($this->pathCompare($route->path, $path)) return true;
         if (empty($route->parameters)) return false;

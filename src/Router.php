@@ -2,6 +2,7 @@
 
 namespace Il4mb\Routing;
 
+use Closure;
 use Exception;
 use Il4mb\Routing\Http\Code;
 use Il4mb\Routing\Http\Request;
@@ -71,14 +72,15 @@ class Router implements Interceptor
 
         $htaccessFile = rtrim($root, "\/") . "/" . trim($this->routeOffset, "\/") . "/.htaccess";
         if (!file_exists($htaccessFile)) {
-            $htaccess = <<<EOS
-# THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
-# YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
-RewriteEngine on
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ "/$scriptName" [NC,L,QSA]
-EOS;
+            $htaccess =
+                <<<EOS
+            # THIS FILE ARE GENERATE BY <IL4MB/ROUTING> 
+            # YOU CAN MODIFY ANY THING BUT MAKE SURE EACH REQUEST ARE POINT TO INDEX.PHP
+            RewriteEngine on
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule ^(.*)$ "/$scriptName" [NC,L,QSA]
+            EOS;
             file_put_contents($htaccessFile, $htaccess);
         } else {
             $htaccess = file_get_contents($htaccessFile);
@@ -184,6 +186,8 @@ EOS;
     {
         $response = new Response();
         try {
+
+            $originalRoutes = $this->routes;
             $routes = $this->routes;
             usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
 
@@ -211,21 +215,29 @@ EOS;
                     )
                 );
             }
-
-
             if (empty($mathedRoutes)) throw new Exception("Route not found.", 404);
-            $request->set("__route", $mathedRoutes[0]);
-            $executor = new MiddlewareExecutor($mathedRoutes[0]->middlewares ?? []);
 
-            return $executor($request, function () use ($request, $response) {
-                foreach ($this->interceptors as $interceptor) {
-                    if ($interceptor->onDispatch($request, $response)) break;
-                }
-                return $response;
-            });
+            /**
+             * Reset route orders
+             * @var array<string> $matchesRoutePath
+             */
+            $matchesRoutePath = array_map(
+                fn(Route $route) => $route->path,
+                $mathedRoutes
+            );
+
+            $mathedRoutes = array_values(
+                array_filter(
+                    $originalRoutes,
+                    fn(Route $route) => in_array($route->path, $matchesRoutePath)
+                )
+            );
+            $request->set("__routes", $mathedRoutes);
+            foreach ($this->interceptors as $interceptor) {
+                if ($interceptor->onDispatch($request, $response)) break;
+            }
         } catch (Throwable $t) {
-            $response->setCode(Code::fromCode($t->getCode()) ?? 500);
-            $response->setContent($t->getMessage());
+
             foreach ($this->interceptors as $interceptor) {
                 if ($interceptor->onFailed($t, $request, $response)) break;
             }
@@ -251,9 +263,12 @@ EOS;
     public function onDispatch(Request &$request, Response &$response): bool
     {
         try {
-            $route = $request->get("__route", Route::class);
-            if ($route && $route->callback) {
-                $this->invokeRoute($route, $request, $response);
+            /**
+             * @var array<Route> $routes
+             */
+            $routes = $request->get("__routes");
+            if ($routes) {
+                $this->executeRoutes($routes, 0, $request, $response);
             }
         } catch (Throwable $t) {
             foreach ($this->interceptors as $interceptor) {
@@ -263,21 +278,40 @@ EOS;
         return false;
     }
 
-    private function invokeRoute(Route $route, Request $request, Response $response): void
+    private function executeRoutes(array $routes, int $index, Request $request, Response $response): void
     {
+        if (!isset($routes[$index])) // Route not found
+            throw new Exception("Route not found.", 404);
+
+        $route = $routes[$index];
+        $next = function () use ($routes, $index, $request, $response) {
+            $this->executeRoutes($routes, $index + 1, $request, $response);
+        };
+        $this->invokeRoute($route, $request, $response, $next);
+    }
+
+    private function invokeRoute(Route $route, Request $request, Response $response, Closure $next): void
+    {
+        MiddlewareExecutor::execute($route, $request);
         $params = $route->parameters;
-        foreach ($this->interceptors as $interceptor) {
+        foreach ($this->interceptors as $interceptor)
             if ($interceptor->onBeforeInvoke($route)) break;
-        }
-        $content = $route->callback->__invoke(...[...$params, $request, $response]);
-        $response->setContent($content);
+        $content = $route->callback->__invoke(...[...$params, $request, $response, $next]);
+        if ($content !== null)
+            $response->setContent($content);
+
         foreach ($this->interceptors as $interceptor) {
             if ($interceptor->onInvoke($route)) break;
         }
     }
 
+
     function onFailed(Throwable $t, Request &$request, Response &$response): bool
     {
+        $response->setCode(Code::fromCode($t->getCode()) ?? 500);
+        if (empty($response->getContent())) {
+            $response->setContent("Error: {$t->getCode()}, {$t->getMessage()}");
+        }
         return false;
     }
 
