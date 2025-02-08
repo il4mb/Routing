@@ -167,7 +167,7 @@ class Request
             "Sec-Fetch-Mode"   => "cors"
         ];
         foreach ($keys as $key => $value) {
-            if (isset($this->headers[strtolower($key)]) || $this->headers[strtolower($key)] === $value) {
+            if (isset($this->headers[strtolower($key)]) && $this->headers[strtolower($key)] === $value) {
                 return true;
             }
         }
