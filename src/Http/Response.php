@@ -130,7 +130,7 @@ class Response
         $this->http_response_code($this->code);
 
         $content = !empty($content) ? (is_string($content) ? $content : json_encode($content)) : "";
-        $this->headers["content-length"] = mb_strlen($content, '8bit');
+        $this->headers["content-length"] = \mb_strlen($content, '8bit');
         if (is_array($this->content)) {
             $this->headers["content-type"] = "application/json";
         }
