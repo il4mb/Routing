@@ -217,21 +217,6 @@ class Router implements Interceptor
             }
             if (empty($mathedRoutes)) throw new Exception("Route not found.", 404);
 
-            /**
-             * Reset route orders
-             * @var array<string> $matchesRoutePath
-             */
-            $matchesRoutePath = array_map(
-                fn(Route $route) => $route->path,
-                $mathedRoutes
-            );
-
-            $mathedRoutes = array_values(
-                array_filter(
-                    $originalRoutes,
-                    fn(Route $route) => in_array($route->path, $matchesRoutePath)
-                )
-            );
             $request->set("__routes", $mathedRoutes);
             foreach ($this->interceptors as $interceptor) {
                 if ($interceptor->onDispatch($request, $response)) break;
