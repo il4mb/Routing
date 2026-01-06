@@ -35,7 +35,7 @@ class Callback
                         ($expectedType === 'bool' && is_bool($argument)) ||
                         ($expectedType === 'float' && is_float($argument)) ||
                         (class_exists($expectedType) && is_a($argument, $expectedType, true)) ||
-                        (interface_exists($expectedType) && in_array($expectedType, class_implements($argument)))
+                        (interface_exists($expectedType) && is_object($argument) && in_array($expectedType, class_implements($argument)))
                     ) {
                         $payload[] = $argument;
                         unset($arguments[$key]);
@@ -47,7 +47,7 @@ class Callback
 
                 foreach ($arguments as $argument) {
                     if ($argument instanceof RouteParam && $argument->name == $parameter->getName()) {
-                        $payload[] = urldecode($argument->value);
+                        $payload[] = $argument->value === null ? null : rawurldecode($argument->value);
                         $matched = true;
                         break;
                     }

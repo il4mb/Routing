@@ -7,8 +7,11 @@ use Exception;
 use Il4mb\Routing\Adapters\Http\HttpContextFactory;
 use Il4mb\Routing\Adapters\Http\HttpRouteCompiler;
 use Il4mb\Routing\Engine\DecisionPolicy;
+use Il4mb\Routing\Engine\Errors\AmbiguousRouteException;
+use Il4mb\Routing\Engine\Errors\NoRouteMatchedException;
 use Il4mb\Routing\Engine\FailureMode;
 use Il4mb\Routing\Engine\Hooks\NoopHook;
+use Il4mb\Routing\Engine\Hooks\RoutingHook;
 use Il4mb\Routing\Engine\RouteTable;
 use Il4mb\Routing\Engine\RouterEngine;
 use Il4mb\Routing\Engine\Tracing\ArrayTracer;
@@ -28,6 +31,10 @@ class Router implements Interceptor
     private array $routes = [];
     private array $interceptors = [];
     private array $options;
+
+    private bool $compiledDirty = true;
+    private ?RouteTable $compiledTable = null;
+    private ?RoutingHook $engineHook = null;
 
     public function __construct(array $interceptors = [], array $options = [])
     {
@@ -111,10 +118,14 @@ class Router implements Interceptor
                 if ($matches[1] !== $should) {
                     $htaccess = str_replace($matches[1], $should, $htaccess);
                     file_put_contents($htaccessFile, $htaccess);
-                    header("Refresh: 0");
                 }
             }
         }
+    }
+
+    public function setRoutingHook(RoutingHook $hook): void
+    {
+        $this->engineHook = $hook;
     }
 
     public function removeInterceptor(Interceptor $interceptor): void
@@ -159,6 +170,16 @@ class Router implements Interceptor
             . (!empty($basepath) ? "/$basepath" : "") . "/"
             .  trim($route->path, "\/");
 
+        $normalizeHeaderConstraints = static function (array $headers): array {
+            $normalized = [];
+            foreach ($headers as $name => $value) {
+                $key = strtolower((string)$name);
+                $normalized[$key] = $value === null ? null : (string)$value;
+            }
+            ksort($normalized);
+            return $normalized;
+        };
+
         if ($this->options['throwOnDuplicatePath']) {
             $duplicates = array_filter(
                 $this->routes,
@@ -166,6 +187,7 @@ class Router implements Interceptor
                     && $existingRoute->method === $route->method
                     && ($existingRoute->host ?? null) === ($route->host ?? null)
                     && ($existingRoute->protocol ?? null) === ($route->protocol ?? null)
+                    && $normalizeHeaderConstraints($existingRoute->headers ?? []) === $normalizeHeaderConstraints($route->headers ?? [])
             );
             if (count($duplicates) > 0) {
                 throw new InvalidArgumentException("Cannot add path \"$route->path\", same path already added in collection.");
@@ -180,6 +202,35 @@ class Router implements Interceptor
             "path" => $path,
             "callback" => $route->callback
         ]);
+
+        $this->compiledDirty = true;
+    }
+
+    private function ensureCompiled(): void
+    {
+        if (!$this->compiledDirty && $this->compiledTable !== null) {
+            return;
+        }
+
+        $routeDefs = [];
+        foreach ($this->routes as $i => $r) {
+            $id = $this->makeRouteId($r, (int)$i);
+            $routeDefs[] = HttpRouteCompiler::compile($r, $id);
+        }
+
+        $this->compiledTable = new RouteTable($routeDefs);
+        $this->compiledDirty = false;
+    }
+
+    private function makeRouteId(Route $route, int $index): string
+    {
+        $host = !empty($route->host) ? (' host=' . $route->host) : '';
+        $protocol = !empty($route->protocol) ? (' proto=' . $route->protocol) : '';
+        $priority = (int)($route->priority ?? 0);
+        $fallback = (bool)($route->fallback ?? false);
+        $flags = ' prio=' . $priority . ($fallback ? ' fallback' : '');
+
+        return $route->method . ' ' . $route->path . $host . $protocol . $flags . ' #' . $index;
     }
 
     private function addRoutesFromController(mixed $controller, string $basepath = ''): void
@@ -208,27 +259,32 @@ class Router implements Interceptor
                 ...$this->options
             ]);
 
+            // Phase 1: normalize request into protocol-agnostic engine context.
             $context = HttpContextFactory::fromRequest($request);
+            $request->set('__routing_context', $context);
 
-            $routeDefs = [];
-            foreach ($this->routes as $i => $r) {
-                $id = $r->method . ' ' . $r->path . ' #' . $i;
-                $routeDefs[] = HttpRouteCompiler::compile($r, $id);
-            }
+            // Phase 2: compile routes into a cached RouteTable (expensive, done only when routes change).
+            $this->ensureCompiled();
 
+            // Phase 3: run routing decision using the engine (single source of truth).
             $policy = DecisionPolicy::normalize((string)($this->options['decisionPolicy'] ?? ''));
             $failureMode = FailureMode::normalize((string)($this->options['failureMode'] ?? ''));
             $tracer = ($this->options['debugTrace'] ?? false) ? new ArrayTracer() : new NullTracer();
 
             $engine = new RouterEngine(
-                table: new RouteTable($routeDefs),
-                hook: new NoopHook(),
+                table: $this->compiledTable ?? new RouteTable([]),
+                hook: $this->engineHook ?? new NoopHook(),
                 tracer: $tracer,
                 policy: $policy,
                 failureMode: $failureMode,
             );
 
             $outcome = $engine->route($context);
+
+            if (($this->options['debugTrace'] ?? false) && $tracer instanceof ArrayTracer) {
+                $request->set('__route_trace', $tracer->events());
+            }
+
             if (!$outcome->ok) {
                 throw $outcome->error;
             }
@@ -246,17 +302,18 @@ class Router implements Interceptor
                 $caps = $capturesById[$selectedDef->id] ?? [];
                 foreach (($selected->parameters ?? []) as $param) {
                     if ($param?->name !== null && array_key_exists($param->name, $caps)) {
-                        $param->value = urldecode((string)$caps[$param->name]);
+                        $param->value = rawurldecode((string)$caps[$param->name]);
                     }
                 }
                 $matchedRoutes[] = $selected;
             }
 
-            if (($this->options['debugTrace'] ?? false) && $tracer instanceof ArrayTracer) {
-                $request->set('__route_trace', $tracer->events());
+            if ($this->options['debugTrace'] ?? false) {
                 $request->set('__route_decision', [
                     'selected' => array_map(fn($r) => $r->id, $decision?->selected ?? []),
                     'reason' => $decision?->reason,
+                    'policy' => $policy,
+                    'failureMode' => $failureMode,
                 ]);
             }
 
@@ -340,7 +397,17 @@ class Router implements Interceptor
 
     function onFailed(Throwable $t, Request &$request, Response &$response): bool
     {
-        $response->setCode(Code::fromCode($t->getCode()) ?? 500);
+        $code = (int)$t->getCode();
+        if ($code <= 0) {
+            if ($t instanceof NoRouteMatchedException) {
+                $code = 404;
+            } elseif ($t instanceof AmbiguousRouteException) {
+                $code = 500;
+            } else {
+                $code = 500;
+            }
+        }
+        $response->setCode(Code::fromCode($code) ?? 500);
         if (empty($response->getContent())) {
             $response->setContent("Error: {$t->getCode()}, {$t->getMessage()}");
         }

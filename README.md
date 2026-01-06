@@ -118,6 +118,7 @@ if ($outcome->ok) {
 ## Examples
 
 - Gateway-style routing + tracing: [examples/gateway-routing.php](examples/gateway-routing.php)
+- Gateway-style middleware pipeline around target execution: [examples/gateway-middleware.php](examples/gateway-middleware.php)
 - Hot reload via `PhpRuleLoader` + `RouterEngine::reload()`: [examples/hotreload.php](examples/hotreload.php)
 
 ## Design Philosophy

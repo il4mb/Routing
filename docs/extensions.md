@@ -87,6 +87,24 @@ A simple pattern is to implement a `RoutingHook` that increments counters:
 
 The core stays dependency-free; integrations own their telemetry clients.
 
+## Middleware (Execution Layer)
+
+Routing and execution are separate concerns. The engine selects a route; adapters execute targets.
+
+For infrastructure use cases, it is common to apply policy middleware *around execution*:
+
+- authentication / authorization
+- rate limits
+- tenant selection
+- request id injection
+
+This repo provides an engine-level middleware pipeline:
+
+- `Il4mb\Routing\Engine\Middlewares\Middleware`
+- `Il4mb\Routing\Engine\Middlewares\MiddlewareExecutor`
+
+See [examples/gateway-middleware.php](examples/gateway-middleware.php) for a full runnable example.
+
 ## HTTP Router Compatibility Notes
 
 The legacy `Il4mb\Routing\Router`:
