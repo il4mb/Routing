@@ -2,7 +2,12 @@
 
 namespace Il4mb\Routing;
 
+use Closure;
 use Il4mb\Routing\Map\RouteParam;
+use ReflectionNamedType;
+use ReflectionParameter;
+use ReflectionType;
+use ReflectionUnionType;
 use ReflectionClass;
 
 class Callback
@@ -22,41 +27,48 @@ class Callback
         $arguments = func_get_args();
         $parameters = $this->getParameters();
 
+        $routeParamValues = [];
+        foreach ($arguments as $argument) {
+            if ($argument instanceof RouteParam && $argument->name !== null) {
+                // Values are already decoded at the router/path-matching layer.
+                $routeParamValues[$argument->name] = $argument->value;
+            }
+        }
+
         foreach ($parameters as $i => $parameter) {
             $matched = false;
 
             if ($parameter->hasType()) {
-                $expectedType = (string)$parameter->getType();
+                $name = $parameter->getName();
+                $types = $this->flattenTypes($parameter->getType());
 
-                foreach ($arguments as $key => $argument) {
-                    if (
-                        ($expectedType === 'int' && is_int($argument)) ||
-                        ($expectedType === 'string' && is_string($argument)) ||
-                        ($expectedType === 'bool' && is_bool($argument)) ||
-                        ($expectedType === 'float' && is_float($argument)) ||
-                        (class_exists($expectedType) && is_a($argument, $expectedType, true)) ||
-                        (interface_exists($expectedType) && is_object($argument) && in_array($expectedType, class_implements($argument)))
-                    ) {
-                        $payload[] = $argument;
-                        unset($arguments[$key]);
-                        $matched = true;
-                        break;
+                // Prefer binding from named RouteParam values when possible.
+                if (array_key_exists($name, $routeParamValues) && $this->typesAcceptScalarCapture($types)) {
+                    $payload[] = $this->castRouteParamValue($routeParamValues[$name], $types, $parameter);
+                    $matched = true;
+                } else {
+                    foreach ($arguments as $key => $argument) {
+                        if ($this->argumentMatchesAnyType($argument, $types)) {
+                            $payload[] = $argument;
+                            unset($arguments[$key]);
+                            $matched = true;
+                            break;
+                        }
                     }
                 }
             } else {
-
-                foreach ($arguments as $argument) {
-                    if ($argument instanceof RouteParam && $argument->name == $parameter->getName()) {
-                        $payload[] = $argument->value === null ? null : rawurldecode($argument->value);
-                        $matched = true;
-                        break;
-                    }
+                $name = $parameter->getName();
+                if (array_key_exists($name, $routeParamValues)) {
+                    $payload[] = $routeParamValues[$name];
+                    $matched = true;
                 }
             }
 
             if (!$matched) {
                 if ($parameter->isDefaultValueAvailable()) {
                     $payload[] = $parameter->getDefaultValue();
+                } elseif ($parameter->allowsNull()) {
+                    $payload[] = null;
                 } else {
                     $payload[] = null;
                 }
@@ -64,6 +76,131 @@ class Callback
         }
 
         return call_user_func_array([$this->object, $this->method], $payload);
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function flattenTypes(?ReflectionType $type): array
+    {
+        if ($type === null) {
+            return [];
+        }
+        if ($type instanceof ReflectionUnionType) {
+            $types = [];
+            foreach ($type->getTypes() as $t) {
+                if ($t instanceof ReflectionNamedType) {
+                    $types[] = (string)$t->getName();
+                }
+            }
+            return $types;
+        }
+        if ($type instanceof ReflectionNamedType) {
+            return [(string)$type->getName()];
+        }
+        return [(string)$type];
+    }
+
+    private function argumentMatchesAnyType(mixed $argument, array $types): bool
+    {
+        foreach ($types as $expectedType) {
+            if ($this->argumentMatchesType($argument, $expectedType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function argumentMatchesType(mixed $argument, string $expectedType): bool
+    {
+        $expectedType = ltrim($expectedType, '\\');
+
+        if ($expectedType === 'mixed') {
+            return true;
+        }
+        if ($expectedType === 'callable') {
+            return is_callable($argument);
+        }
+        if ($expectedType === 'Closure') {
+            return $argument instanceof Closure;
+        }
+        if ($expectedType === 'int') {
+            return is_int($argument);
+        }
+        if ($expectedType === 'string') {
+            return is_string($argument);
+        }
+        if ($expectedType === 'bool') {
+            return is_bool($argument);
+        }
+        if ($expectedType === 'float') {
+            return is_float($argument);
+        }
+        if ($expectedType === 'array') {
+            return is_array($argument);
+        }
+
+        if (is_object($argument) && is_a($argument, $expectedType)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function typesAcceptScalarCapture(array $types): bool
+    {
+        // Only bind path captures into scalar-ish controller params.
+        // Class/interface typed params should be injected from arguments (Request/Response/etc),
+        // not from route captures.
+        foreach ($types as $t) {
+            $t = ltrim((string)$t, '\\');
+            if ($t === 'mixed' || $t === 'string' || $t === 'int' || $t === 'float' || $t === 'bool') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function castRouteParamValue(mixed $value, array $types, ReflectionParameter $parameter): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $types = array_values(array_filter(array_map(fn($t) => ltrim((string)$t, '\\'), $types), fn($t) => $t !== '' && $t !== 'null'));
+
+        if (in_array('mixed', $types, true)) {
+            return $value;
+        }
+
+        // Route params come from paths and are typically strings.
+        $stringValue = is_string($value) ? $value : (string)$value;
+
+        // Heuristic casting for union types: prefer numeric/bool when clearly representable.
+        if (in_array('int', $types, true) && preg_match('/^-?\d+$/', $stringValue)) {
+            return (int)$stringValue;
+        }
+
+        if (in_array('float', $types, true) && is_numeric($stringValue)) {
+            return (float)$stringValue;
+        }
+
+        if (in_array('bool', $types, true)) {
+            $v = strtolower(trim($stringValue));
+            if (in_array($v, ['1', 'true', 'yes', 'on'], true)) {
+                return true;
+            }
+            if (in_array($v, ['0', 'false', 'no', 'off'], true)) {
+                return false;
+            }
+        }
+
+        if (in_array('string', $types, true) || count($types) > 0) {
+            return (string)$stringValue;
+        }
+
+        // Fallback: if typed but not a builtin, return as-is.
+        return $value;
     }
 
 

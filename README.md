@@ -43,7 +43,7 @@ final class AdminController
 
     // Fallback route (only used if nothing else matches)
     #[Route(Method::GET, '/{path.*}', fallback: true)]
-    public function notFound($path)
+    public function notFound(string $path, Request $req, Response $res, callable $next)
     {
         return ['error' => 'not_found', 'path' => $path];
     }
@@ -113,6 +113,8 @@ if ($outcome->ok) {
 
 - Architecture: [docs/architecture.md](docs/architecture.md)
 - Routing model: [docs/routing.md](docs/routing.md)
+- HTTP router (legacy adapter): [docs/http.md](docs/http.md)
+- HTTP controllers (binding + request/response cookbook): [docs/http-controller.md](docs/http-controller.md)
 - Extensions: [docs/extensions.md](docs/extensions.md)
 
 ## Examples
@@ -120,6 +122,17 @@ if ($outcome->ok) {
 - Gateway-style routing + tracing: [examples/gateway-routing.php](examples/gateway-routing.php)
 - Gateway-style middleware pipeline around target execution: [examples/gateway-middleware.php](examples/gateway-middleware.php)
 - Hot reload via `PhpRuleLoader` + `RouterEngine::reload()`: [examples/hotreload.php](examples/hotreload.php)
+- HTTP attribute routing (basic): [examples/http-basic.php](examples/http-basic.php)
+- HTTP attribute routing (header constraints): [examples/http-headers.php](examples/http-headers.php)
+- HTTP attribute routing (priority + fallback): [examples/http-priority-fallback.php](examples/http-priority-fallback.php)
+
+## Tests
+
+Run the lightweight (dependency-free) tests:
+
+```bash
+php -d zend.assertions=1 -d assert.exception=1 tests/run.php
+```
 
 ## Design Philosophy
 

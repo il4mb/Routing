@@ -110,3 +110,7 @@ The engine emits structured trace events via `Tracer`:
 - final decision (selected route ids)
 
 The legacy HTTP router can store these events into the `Request` object when `debugTrace=true`.
+
+For HTTP-specific behavior (attribute routes, controller signature binding, and router options), see:
+
+- [docs/http.md](docs/http.md)
