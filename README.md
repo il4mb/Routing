@@ -16,7 +16,7 @@ The intent is to keep routing decisions explainable, testable, and observable.
 
 ## Requirements
 
-- PHP 8.0+
+- PHP 8.1+
 - Composer (for autoloading)
 
 ## Installation
