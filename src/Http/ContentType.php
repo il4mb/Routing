@@ -2,32 +2,32 @@
 
 namespace Il4mb\Routing\Http;
 
-enum ContentType: string
+final class ContentType
 {
-    case HTML = "text/html";
-    case JSON = "application/json";
-    case XML = "application/xml";
-    case TEXT = "text/plain";
-    case JPEG = "image/jpeg";
-    case PNG = "image/png";
-    case PDF = "application/pdf";
-    case JAVASCRIPT = "application/javascript";
-    case CSS = "text/css";
-    case CSV = "text/csv";
-    case FORM_URLENCODED = "application/x-www-form-urlencoded";
-    case MULTIPART_FORM_DATA = "multipart/form-data";
-    case GIF = "image/gif";
-    case BMP = "image/bmp";
-    case ICO = "image/x-icon";
-    case SVG = "image/svg+xml";
-    case WEBP = "image/webp";
-    case MP3 = "audio/mpeg";
-    case MP4 = "video/mp4";
-    case OGG = "audio/ogg";
-    case WAV = "audio/wav";
-    case WEBM = "video/webm";
-    case ZIP = "application/zip";
-    case GZIP = "application/gzip";
-    case TAR = "application/x-tar";
-    case RAR = "application/vnd.rar";
+    public const HTML = 'text/html';
+    public const JSON = 'application/json';
+    public const XML = 'application/xml';
+    public const TEXT = 'text/plain';
+    public const JPEG = 'image/jpeg';
+    public const PNG = 'image/png';
+    public const PDF = 'application/pdf';
+    public const JAVASCRIPT = 'application/javascript';
+    public const CSS = 'text/css';
+    public const CSV = 'text/csv';
+    public const FORM_URLENCODED = 'application/x-www-form-urlencoded';
+    public const MULTIPART_FORM_DATA = 'multipart/form-data';
+    public const GIF = 'image/gif';
+    public const BMP = 'image/bmp';
+    public const ICO = 'image/x-icon';
+    public const SVG = 'image/svg+xml';
+    public const WEBP = 'image/webp';
+    public const MP3 = 'audio/mpeg';
+    public const MP4 = 'video/mp4';
+    public const OGG = 'audio/ogg';
+    public const WAV = 'audio/wav';
+    public const WEBM = 'video/webm';
+    public const ZIP = 'application/zip';
+    public const GZIP = 'application/gzip';
+    public const TAR = 'application/x-tar';
+    public const RAR = 'application/vnd.rar';
 }

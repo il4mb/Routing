@@ -1,114 +1,133 @@
-# Il4mb Routing Library
+# Routing Engine (PHP)
 
-Il4mb Routing is a simple and flexible PHP routing library designed to make request handling and middleware execution intuitive and efficient.
+This repository provides a deterministic routing engine that can be embedded into infrastructure-style software:
 
----
+- HTTP applications (controller routing)
+- API gateways and reverse proxies (upstream selection)
+- Programmable network services (policy routing)
+- Mail servers (message classification and delivery policy)
 
-## Features
+The project contains both:
 
-- **PSR-4 Autoloading**
-- Attribute-based route definitions
-- Middleware support for request preprocessing
-- Built with PHP 8.0+
+- a **protocol-agnostic core** (`src/Engine/*`) with explicit match and decision phases, and
+- a **legacy HTTP router** (`src/Router.php`) that compiles attribute routes into the core engine.
 
----
+The intent is to keep routing decisions explainable, testable, and observable.
+
+## Requirements
+
+- PHP 8.0+
+- Composer (for autoloading)
 
 ## Installation
-
-Install the library using Composer:
 
 ```bash
 composer require il4mb/routing
 ```
 
----
-
-## Getting Started
-
-### Define a Route
-
-You can define routes in your controllers using PHP attributes:
+## Quick Start (HTTP Attribute Routes)
 
 ```php
 use Il4mb\Routing\Http\Method;
+use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Map\Route;
+use Il4mb\Routing\Router;
 
-class AdminController
+final class AdminController
 {
-    #[Route(Method::GET, "/home")]
+    #[Route(Method::GET, '/admin/home', priority: 50)]
     public function home()
     {
-        return "Welcome to the Admin Home!";
+        return 'ok';
     }
-}
-```
 
----
-
-### Middleware
-
-Create a middleware by implementing the `Il4mb\Routing\Middlewares\Middleware` interface:
-
-```php
-namespace App\Middlewares;
-
-use Il4mb\Routing\Http\Request;
-use Il4mb\Routing\Http\Response;
-use Closure;
-
-class AuthMiddleware implements Middleware
-{
-    public function handle(Request $request, Closure $next): Response
+    // Fallback route (only used if nothing else matches)
+    #[Route(Method::GET, '/{path.*}', fallback: true)]
+    public function notFound($path)
     {
-        // do something 
-
-        return $next($request);
+        return ['error' => 'not_found', 'path' => $path];
     }
 }
-```
 
-Use the middleware in your routes:
+$router = new Router(options: [
+    // Production deployments typically disable this side-effect.
+    'manageHtaccess' => false,
 
-```php
-#[Route(Method::GET, "/dashboard", middlewares: [AuthMiddleware::class])]
-public function dashboard()
-{
-    return "Welcome to the dashboard!";
-}
-```
+    // chain|first|error_on_ambiguous
+    'decisionPolicy' => 'first',
 
----
-
-## Example Usage
-
-### Initialize Middleware Executor
-
-```php
-use Il4mb\Routing\Middlewares\MiddlewareExecutor;
-use Il4mb\Routing\Http\Request;
-
-$executor = new MiddlewareExecutor([
-    App\Middlewares\AuthMiddleware::class
+    // Enable only while debugging.
+    'debugTrace' => true,
 ]);
 
-$request = new Request();
-$response = $executor($request, function ($req) {
-    return new Response("Request handled successfully.");
-});
+$router->addRoute(new AdminController());
 
-echo $response->getBody();
+$response = $router->dispatch(new Request());
+echo $response->send();
 ```
 
----
+When `debugTrace=true`, the router stores trace data into:
+
+- `Request::get('__route_trace')`
+- `Request::get('__route_decision')`
+
+## Using the Core Engine (Protocol-Agnostic)
+
+The engine routes a `RoutingContext` through a deterministic pipeline.
+
+```php
+use Il4mb\Routing\Engine\DecisionPolicy;
+use Il4mb\Routing\Engine\RouteDefinition;
+use Il4mb\Routing\Engine\RouteTable;
+use Il4mb\Routing\Engine\RouterEngine;
+use Il4mb\Routing\Engine\RoutingContext;
+use Il4mb\Routing\Engine\Matchers\HostMatcher;
+use Il4mb\Routing\Engine\Matchers\PathPatternMatcher;
+use Il4mb\Routing\Engine\Matchers\ProtocolMatcher;
+
+$routes = [
+    new RouteDefinition(
+        id: 'proxy.payments.eu',
+        target: ['cluster' => 'payments-eu'],
+        matchers: [
+            new ProtocolMatcher('https'),
+            new HostMatcher('payments.example.com'),
+            new PathPatternMatcher('/v1/**'),
+        ],
+        priority: 100,
+    ),
+];
+
+$engine = new RouterEngine(new RouteTable($routes), policy: DecisionPolicy::FIRST);
+
+$ctx = new RoutingContext(protocol: 'https', host: 'payments.example.com', path: '/v1/charge', method: 'GET');
+$outcome = $engine->route($ctx);
+
+if ($outcome->ok) {
+    $selected = $outcome->decision->selected[0] ?? null;
+    // $selected->target contains your adapter payload
+}
+```
+
+## Documentation
+
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- Routing model: [docs/routing.md](docs/routing.md)
+- Extensions: [docs/extensions.md](docs/extensions.md)
+
+## Examples
+
+- Gateway-style routing + tracing: [examples/gateway-routing.php](examples/gateway-routing.php)
+- Hot reload via `PhpRuleLoader` + `RouterEngine::reload()`: [examples/hotreload.php](examples/hotreload.php)
+
+## Design Philosophy
+
+- Explicit over implicit: matching, ordering, and decision policy are visible.
+- Configuration as code: routes can be loaded as typed objects and tested.
+- Predictable execution: deterministic tie-breaking (priority → specificity → id).
+- Minimal magic: adapters own side-effects; the core engine stays pure.
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
----
-
-## Author
-
-**Ilham B**  
-Email: durianbohong@gmail.com
+MIT
 

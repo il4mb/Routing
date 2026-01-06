@@ -9,10 +9,10 @@ use InvalidArgumentException;
 class Response
 {
 
-    public readonly ListPair $headers;
-    public readonly ListPair $cookies;
+    public ListPair $headers;
+    public ListPair $cookies;
 
-    protected Code $code = Code::OK;
+    protected int $code = Code::OK;
     protected mixed $content = "";
 
 
@@ -25,7 +25,7 @@ class Response
         ]
     ) {
         $this->content = $content;
-        $this->code    = $code;
+        $this->code    = is_int($code) ? ($code) : Code::OK;
         $this->headers = new ListPair($headers);
         $this->cookies = new ListPair();
     }
@@ -45,13 +45,9 @@ class Response
         return $this->headers;
     }
 
-    final public function setCode(Code|int $code)
+    final public function setCode(int $code)
     {
-        if (is_integer($code)) {
-            $code = Code::fromCode($code);
-        }
-
-        $this->code = $code;
+        $this->code = Code::fromCode($code) ?? Code::INTERNAL_SERVER_ERROR;
         return $this;
     }
 
@@ -113,14 +109,14 @@ class Response
     }
 
 
-    final function http_response_code(Code $code): void
+    final function http_response_code(int $code): void
     {
 
         if (!function_exists('http_response_code')) {
             $protocol = $_SERVER['SERVER_PROTOCOL'] ?? 'HTTP/2.0';
-            header($protocol . ' ' . $code->value . ' ' . $code->reasonPhrase());
+            header($protocol . ' ' . $code . ' ' . Code::reasonPhrase($code));
         } else
-            @http_response_code($code->value);
+            @http_response_code($code);
     }
 
 
@@ -164,7 +160,7 @@ class Response
 
         return [
             "content" => $this->content,
-            "code"    => $this->code->value,
+            "code"    => $this->code,
             "headers" => [
                 "Content-Type" => $this->headers["content-type"],
                 "Content-Encoding" => $this->headers["content-encoding"]

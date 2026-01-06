@@ -17,9 +17,9 @@ class Request
         "__queries" => [],
         "__cookies" => []
     ];
-    public readonly ?Method $method;
-    public readonly Url $uri;
-    public readonly ListPair $headers;
+    public ?string $method;
+    public Url $uri;
+    public ListPair $headers;
 
     function __construct($options = [
         "clearState" => true
@@ -155,9 +155,9 @@ class Request
         return $this->props["__cookies"][$name] ?? null;
     }
 
-    public function isMethod(Method $method)
+    public function isMethod(string $method)
     {
-        return strtoupper($this->method?->value) === strtoupper($method->value);
+        return strtoupper((string)$this->method) === strtoupper($method);
     }
 
     public function isAjax()
@@ -176,9 +176,9 @@ class Request
         }
     }
 
-    function isContent(ContentType $accept)
+    function isContent(string $accept)
     {
-        return in_array($accept->value, explode(",", $this->headers['accept'] ?? ""));
+        return in_array($accept, explode(",", (string)($this->headers['accept'] ?? "")), true);
     }
 
     private function parseMutipartBoundary()

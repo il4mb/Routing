@@ -4,6 +4,15 @@ namespace Il4mb\Routing;
 
 use Closure;
 use Exception;
+use Il4mb\Routing\Adapters\Http\HttpContextFactory;
+use Il4mb\Routing\Adapters\Http\HttpRouteCompiler;
+use Il4mb\Routing\Engine\DecisionPolicy;
+use Il4mb\Routing\Engine\FailureMode;
+use Il4mb\Routing\Engine\Hooks\NoopHook;
+use Il4mb\Routing\Engine\RouteTable;
+use Il4mb\Routing\Engine\RouterEngine;
+use Il4mb\Routing\Engine\Tracing\ArrayTracer;
+use Il4mb\Routing\Engine\Tracing\NullTracer;
 use Il4mb\Routing\Http\Code;
 use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Http\Response;
@@ -15,10 +24,10 @@ use Throwable;
 
 class Router implements Interceptor
 {
-    private readonly string $routeOffset;
+    private string $routeOffset;
     private array $routes = [];
     private array $interceptors = [];
-    private readonly array $options;
+    private array $options;
 
     public function __construct(array $interceptors = [], array $options = [])
     {
@@ -57,12 +66,24 @@ class Router implements Interceptor
             $this->routeOffset = $options['pathOffset'];
         }
 
-        $this->controlHtaccess($root);
         $this->options = [
-            "throwOnDuplicatePath" => true,
-            "autoDetectFolderOffset" => true,
-            ...$options
+            'throwOnDuplicatePath' => true,
+            'autoDetectFolderOffset' => true,
+            // Legacy behavior: if multiple routes match, execute them in order.
+            // Supported values: chain|first|error_on_ambiguous
+            'decisionPolicy' => DecisionPolicy::CHAIN,
+            // When true, store a structured trace into Request["__route_trace"].
+            'debugTrace' => false,
+            // fail_closed|fail_open
+            'failureMode' => FailureMode::FAIL_CLOSED,
+            // Legacy side-effect: auto-generate/update .htaccess.
+            'manageHtaccess' => true,
+            ...$options,
         ];
+
+        if (($this->options['manageHtaccess'] ?? true) === true) {
+            $this->controlHtaccess($root);
+        }
     }
 
     private function controlHtaccess($root)
@@ -138,11 +159,13 @@ class Router implements Interceptor
             . (!empty($basepath) ? "/$basepath" : "") . "/"
             .  trim($route->path, "\/");
 
-        if ($this->options["throwOnDuplicatePath"]) {
+        if ($this->options['throwOnDuplicatePath']) {
             $duplicates = array_filter(
                 $this->routes,
                 fn($existingRoute) => $existingRoute->path === $path
                     && $existingRoute->method === $route->method
+                    && ($existingRoute->host ?? null) === ($route->host ?? null)
+                    && ($existingRoute->protocol ?? null) === ($route->protocol ?? null)
             );
             if (count($duplicates) > 0) {
                 throw new InvalidArgumentException("Cannot add path \"$route->path\", same path already added in collection.");
@@ -166,13 +189,7 @@ class Router implements Interceptor
             foreach ($method->getAttributes() as $defAttr) {
                 if ($defAttr->getName() == Route::class) {
                     $routeInstance = $defAttr->newInstance();
-                    $reflector = new ReflectionClass($routeInstance);
-                    if ($reflector->hasProperty('callback')) {
-                        $property = $reflector->getProperty('callback');
-                        $property->setAccessible(true);
-                        $property->setValue($routeInstance, Callback::create($method->getName(), $controller));
-                        $property->setAccessible(false);
-                    }
+                    $routeInstance->callback = Callback::create($method->getName(), $controller);
                     $this->addRouteInternal($routeInstance, $basepath);
                 }
             }
@@ -186,38 +203,68 @@ class Router implements Interceptor
     {
         $response = new Response();
         try {
-
-            $originalRoutes = $this->routes;
-            $routes = $this->routes;
-            usort($routes, fn($a, $b) => strcmp($b->path, $a->path));
-
             $request->set("__route_options", [
                 "pathOffset" => $this->routeOffset,
                 ...$this->options
             ]);
-            $uri = $request->uri;
-            $nonBrancesRoutes = array_filter($routes, fn(Route $route) => empty($route->parameters));
-            $brancesRoutes = array_filter($routes, fn(Route $route) => count($route->parameters) > 0);
 
-            $mathedRoutes = array_values(
-                array_filter(
-                    $nonBrancesRoutes,
-                    fn(Route $route) => $request->method === $route->method
-                        && $uri->matchRoute($route)
-                )
-            );
-            if (count($mathedRoutes) < 1) {
-                $mathedRoutes = array_values(
-                    array_filter(
-                        $brancesRoutes,
-                        fn(Route $route) => $request->method === $route->method
-                            && $uri->matchRoute($route)
-                    )
-                );
+            $context = HttpContextFactory::fromRequest($request);
+
+            $routeDefs = [];
+            foreach ($this->routes as $i => $r) {
+                $id = $r->method . ' ' . $r->path . ' #' . $i;
+                $routeDefs[] = HttpRouteCompiler::compile($r, $id);
             }
-            if (empty($mathedRoutes)) throw new Exception("Route not found.", 404);
 
-            $request->set("__routes", $mathedRoutes);
+            $policy = DecisionPolicy::normalize((string)($this->options['decisionPolicy'] ?? ''));
+            $failureMode = FailureMode::normalize((string)($this->options['failureMode'] ?? ''));
+            $tracer = ($this->options['debugTrace'] ?? false) ? new ArrayTracer() : new NullTracer();
+
+            $engine = new RouterEngine(
+                table: new RouteTable($routeDefs),
+                hook: new NoopHook(),
+                tracer: $tracer,
+                policy: $policy,
+                failureMode: $failureMode,
+            );
+
+            $outcome = $engine->route($context);
+            if (!$outcome->ok) {
+                throw $outcome->error;
+            }
+
+            $decision = $outcome->decision;
+            $capturesById = [];
+            foreach ($decision?->candidates ?? [] as $c) {
+                $capturesById[$c['route']->id] = $c['captures'] ?? [];
+            }
+
+            $matchedRoutes = [];
+            foreach ($decision?->selected ?? [] as $selectedDef) {
+                /** @var Route $selected */
+                $selected = $selectedDef->target;
+                $caps = $capturesById[$selectedDef->id] ?? [];
+                foreach (($selected->parameters ?? []) as $param) {
+                    if ($param?->name !== null && array_key_exists($param->name, $caps)) {
+                        $param->value = urldecode((string)$caps[$param->name]);
+                    }
+                }
+                $matchedRoutes[] = $selected;
+            }
+
+            if (($this->options['debugTrace'] ?? false) && $tracer instanceof ArrayTracer) {
+                $request->set('__route_trace', $tracer->events());
+                $request->set('__route_decision', [
+                    'selected' => array_map(fn($r) => $r->id, $decision?->selected ?? []),
+                    'reason' => $decision?->reason,
+                ]);
+            }
+
+            if (empty($matchedRoutes) && $failureMode !== FailureMode::FAIL_OPEN) {
+                throw new Exception('Route not found.', 404);
+            }
+
+            $request->set("__routes", $matchedRoutes);
             foreach ($this->interceptors as $interceptor) {
                 if ($interceptor->onDispatch($request, $response)) break;
             }
