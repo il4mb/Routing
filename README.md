@@ -117,6 +117,10 @@ if ($outcome->ok) {
 - HTTP controllers (binding + request/response cookbook): [docs/http-controller.md](docs/http-controller.md)
 - Extensions: [docs/extensions.md](docs/extensions.md)
 
+## Release notes
+
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+
 ## Examples
 
 - Gateway-style routing + tracing: [examples/gateway-routing.php](examples/gateway-routing.php)
