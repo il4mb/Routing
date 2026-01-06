@@ -127,6 +127,22 @@ The attribute `#[Route(...)]` supports:
 - `headers` (exact match or presence)
 - `metadata` (arbitrary array for integrations)
 
+## Deterministic selection (when multiple routes match)
+
+If multiple non-fallback routes match the same request, the engine will rank them deterministically:
+
+1) higher `priority`
+2) higher specificity (static path beats captures/wildcards)
+3) stable tie-break by route id
+
+Then `decisionPolicy` controls what happens:
+
+- `first`: execute only the best match
+- `chain`: execute all matches in ranked order
+- `error_on_ambiguous`: return an error if more than one non-fallback matches
+
+For a full worked example, see [docs/routing.md](docs/routing.md).
+
 ## Path patterns & captures (HTTP adapter)
 
 The `path` string is compiled into the engine’s path matcher.

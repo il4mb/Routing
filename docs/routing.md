@@ -114,6 +114,73 @@ Infrastructure guidance:
 - Middleware-style HTTP routing (where multiple handlers run) uses `chain`.
 - Security-sensitive routing often uses `error_on_ambiguous`.
 
+## Deterministic Ordering (Tie-Breaking)
+
+When multiple routes match the same context, selection and ordering are deterministic.
+
+The engine applies these tie-break rules:
+
+1) **Priority**: higher `priority` wins.
+2) **Specificity**: more specific matchers win (e.g. static path beats wildcard).
+3) **Id**: stable final tie-break by route id (lexicographic).
+
+How this interacts with policies:
+
+- `first`: returns the single best route by applying the tie-break rules.
+- `chain`: returns all matching non-fallback routes in the deterministic order.
+- `error_on_ambiguous`: errors if more than one non-fallback route matches (even if an ordering exists).
+
+### Example
+
+Given three routes:
+
+- `GET /users/me` (priority 0)
+- `GET /users/{id}` (priority 0)
+- `GET /{path.*}` (priority 0, fallback=true)
+
+And the request context:
+
+- method: `GET`
+- path: `/users/me`
+
+Then:
+
+- Both `/users/me` and `/users/{id}` match.
+- `/users/me` is **more specific** than `/users/{id}` (static segment beats capture).
+- The fallback `/{path.*}` is ignored because at least one non-fallback matched.
+
+Results by policy:
+
+- `first` selects `GET /users/me`.
+- `chain` orders `[GET /users/me, GET /users/{id}]` (and executes both in that order in the HTTP adapter).
+- `error_on_ambiguous` throws an ambiguity error because more than one non-fallback route matched.
+
+## Decision Caching (Optional)
+
+For long-running processes (gateways, daemons), you can enable a small in-memory decision cache in `RouterEngine`.
+
+This cache stores the final `Outcome` for a given normalized key (protocol/host/method/path + only the headers that routes actually reference).
+
+Enable it like:
+
+```php
+$engine = new RouterEngine(
+	new RouteTable($routes),
+	policy: DecisionPolicy::FIRST,
+	cacheDecisions: true,
+	cacheSize: 256,
+);
+```
+
+Safety rules (cache auto-disables unless these are true):
+
+- hook must be `NoopHook` (custom hooks can change semantics)
+- tracer must be `NullTracer` (cached hits would skip per-route trace events)
+- routes must not use runtime `condition` closures
+- routes must not use `AttributeMatcher` (depends on `RoutingContext::attributes`)
+
+If you need caching with custom hooks/tracing/attributes, implement it at the adapter layer where you can include those inputs in your cache key.
+
 ## Fallback Semantics
 
 Fallback routes (`fallback=true`) are only selected when **no** non-fallback routes match.

@@ -66,6 +66,14 @@ final class RouteTable
     /**
      * @return list<RouteDefinition>
      */
+    public function routes(): array
+    {
+        return $this->routes;
+    }
+
+    /**
+     * @return list<RouteDefinition>
+     */
     public function candidates(string $method = '', string $host = ''): array
     {
         $key = strtoupper($method) . '|' . strtolower($host);

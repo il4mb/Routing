@@ -9,6 +9,12 @@ use Il4mb\Routing\Router;
 use Il4mb\Routing\Http\Method;
 use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Http\Response;
+use Il4mb\Routing\Engine\DecisionPolicy;
+use Il4mb\Routing\Engine\RouteDefinition;
+use Il4mb\Routing\Engine\RouteTable;
+use Il4mb\Routing\Engine\RouterEngine;
+use Il4mb\Routing\Engine\RoutingContext;
+use Il4mb\Routing\Engine\Matchers\PathPatternMatcher;
 
 final class TestControllerBasic
 {
@@ -461,6 +467,35 @@ $tests['greedy capture {path.*} binds empty on /'] = function (): void {
 
     test_equal($res->getCode(), 404, 'Root / should be handled by greedy fallback with 404');
     test_equal(($res->getContent()['path'] ?? null), '', 'Greedy capture should bind empty string when matching /');
+};
+
+$tests['engine decision cache does not change results'] = function (): void {
+    $routes = [
+        new RouteDefinition(
+            id: 'r1',
+            target: 'ok',
+            matchers: [new PathPatternMatcher('/users/{id}')],
+            priority: 0,
+            fallback: false,
+        ),
+    ];
+
+    $engine = new RouterEngine(
+        table: new RouteTable($routes),
+        policy: DecisionPolicy::FIRST,
+        cacheDecisions: true,
+        cacheSize: 32,
+    );
+
+    $ctx = new RoutingContext(protocol: 'http', host: 'example.com', path: '/users/123', method: 'GET');
+
+    $out1 = $engine->route($ctx);
+    $out2 = $engine->route($ctx);
+
+    test_equal($out1->ok, true, 'First route() call should succeed');
+    test_equal($out2->ok, true, 'Second route() call should succeed (cache hit)');
+    test_equal($out1->decision->selected[0]->id ?? null, 'r1', 'Selected route id should match');
+    test_equal($out2->decision->selected[0]->id ?? null, 'r1', 'Selected route id should match on cache hit');
 };
 
 $failed = 0;

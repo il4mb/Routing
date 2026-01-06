@@ -15,6 +15,9 @@ use Il4mb\Routing\Engine\RoutingContext;
  */
 final class PathPatternMatcher implements Matcher
 {
+    /** @var array<string, array{0:string,1:int}> */
+    private static array $compileCache = [];
+
     private string $compiled;
     private int $specificity;
 
@@ -57,6 +60,11 @@ final class PathPatternMatcher implements Matcher
      */
     private static function compile(string $pattern, bool $caseSensitive): array
     {
+        $cacheKey = ($caseSensitive ? '1' : '0') . "\0" . $pattern;
+        if (isset(self::$compileCache[$cacheKey])) {
+            return self::$compileCache[$cacheKey];
+        }
+
         $normalized = '/' . ltrim($pattern, '/');
         if ($normalized !== '/' && str_ends_with($normalized, '/')) {
             $normalized = rtrim($normalized, '/');
@@ -68,7 +76,7 @@ final class PathPatternMatcher implements Matcher
         // Special-case root.
         if (count($segments) === 0) {
             $flags = $caseSensitive ? '' : 'i';
-            return ['#^/?$#' . $flags, 10];
+            return self::$compileCache[$cacheKey] = ['#^/?$#' . $flags, 10];
         }
 
         $parts = [];
@@ -128,6 +136,6 @@ final class PathPatternMatcher implements Matcher
         }
 
         $regex = '#^/' . implode('/', $parts) . '/?$#' . ($caseSensitive ? '' : 'i');
-        return [$regex, $specificity];
+        return self::$compileCache[$cacheKey] = [$regex, $specificity];
     }
 }
