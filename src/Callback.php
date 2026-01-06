@@ -3,6 +3,8 @@
 namespace Il4mb\Routing;
 
 use Closure;
+use Il4mb\Routing\Binding\ParameterResolver;
+use Il4mb\Routing\Binding\Resolvers\ValueObjectResolver;
 use Il4mb\Routing\Map\RouteParam;
 use ReflectionNamedType;
 use ReflectionParameter;
@@ -14,11 +16,17 @@ class Callback
 {
     private string $method;
     private object $object;
+    /** @var list<ParameterResolver> */
+    private array $parameterResolvers;
 
-    private function __construct(string $method, object $object)
+    /**
+     * @param list<ParameterResolver> $parameterResolvers
+     */
+    private function __construct(string $method, object $object, array $parameterResolvers = [])
     {
         $this->method = $method;
         $this->object = $object;
+        $this->parameterResolvers = $parameterResolvers;
     }
 
     public function __invoke()
@@ -47,6 +55,20 @@ class Callback
                     $payload[] = $this->castRouteParamValue($routeParamValues[$name], $types, $parameter);
                     $matched = true;
                 } else {
+                    // Custom resolvers (e.g. value objects from capture/header).
+                    foreach ($this->parameterResolvers as $resolver) {
+                        $resolution = $resolver->resolve($parameter, $routeParamValues, $arguments);
+                        if ($resolution->matched) {
+                            $payload[] = $resolution->value;
+                            $matched = true;
+                            break;
+                        }
+                    }
+
+                    if ($matched) {
+                        continue;
+                    }
+
                     foreach ($arguments as $key => $argument) {
                         if ($this->argumentMatchesAnyType($argument, $types)) {
                             $payload[] = $argument;
@@ -221,6 +243,16 @@ class Callback
 
     static function create(string $method, object $object)
     {
-        return new Callback($method, $object);
+        return new Callback($method, $object, [new ValueObjectResolver()]);
+    }
+
+    /**
+     * @param list<ParameterResolver> $resolvers
+     */
+    public static function createWithResolvers(string $method, object $object, array $resolvers): self
+    {
+        // Always include the default resolver last, so custom resolvers can override behavior.
+        $resolvers[] = new ValueObjectResolver();
+        return new Callback($method, $object, $resolvers);
     }
 }

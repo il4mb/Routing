@@ -51,6 +51,29 @@ $router = new Router(options: [
 ]);
 ```
 
+### Mounting / base path
+
+If your app is mounted under a sub-path (e.g. behind a reverse proxy, or served from `/app`), configure it explicitly:
+
+- `basePath` (string|null): Preferred option. A URL path prefix (e.g. `/api`) that will be stripped before matching routes.
+- `pathOffset` (string|null): Backward-compatible alias of `basePath`.
+- `autoDetectFolderOffset` (bool): When `true` (default), the router may infer an implicit base path from `$_SERVER['SCRIPT_NAME']`.
+
+Precedence:
+- If `basePath` is set, it is used.
+- Else if `pathOffset` is set, it is used.
+- Else if `autoDetectFolderOffset` is `true`, the router uses the folder of `SCRIPT_NAME` (best-effort).
+- Else, no offset is applied.
+
+Recommended for production:
+
+```php
+$router = new Router(options: [
+    'basePath' => '/api',
+    'autoDetectFolderOffset' => false,
+]);
+```
+
 ## Debug Trace
 
 When `debugTrace=true`, the router stores engine trace information into the request:
@@ -71,6 +94,26 @@ If so, it responds with:
 
 This makes the legacy HTTP adapter behave more like a production HTTP router.
 
+## Standardized error responses (optional)
+
+By default, the legacy adapter keeps its historical plain-text error body behavior.
+
+You can opt into a consistent error format via router options:
+
+- `errorFormat='text'`: plain `text/plain` body (defaults to the HTTP reason phrase)
+- `errorFormat='json'`: JSON body like `{"error": {"code": 404, "message": "Not Found"}}`
+- `errorExposeDetails=true`: include exception message/class in the standardized response (recommended only for development)
+
+Example:
+
+```php
+$router = new Router(options: [
+    'manageHtaccess' => false,
+    'errorFormat' => 'json',
+    'errorExposeDetails' => false,
+]);
+```
+
 ## Attribute Route Fields
 
 The attribute `#[Route(...)]` supports:
@@ -83,6 +126,38 @@ The attribute `#[Route(...)]` supports:
 - `protocol` (`http`, `https`, ...)
 - `headers` (exact match or presence)
 - `metadata` (arbitrary array for integrations)
+
+## Path patterns & captures (HTTP adapter)
+
+The `path` string is compiled into the engine’s path matcher.
+
+Common patterns:
+
+- Static: `/health`
+- Named segment: `/users/{id}`
+- Regex segment: `/users/{id:[0-9]+}`
+- Greedy wildcard: `/proxy/**`
+- Greedy named (legacy): `/{path.*}`
+- Greedy named (explicit): `/{rest:**}`
+
+Capture values:
+
+- Captures are decoded using `rawurldecode` (path-safe). This means `+` stays `+`.
+- Greedy named captures may match an empty remainder.
+    Example: `/{path.*}` can match `/` and binds `$path = ''` (empty string).
+
+If you write a fallback like:
+
+```php
+#[Route(Method::GET, '/{path.*}', fallback: true)]
+public function notFound(string $path, Response $res): array
+{
+        $res->setCode(404);
+        return ['error' => 'not_found', 'path' => $path];
+}
+```
+
+then requesting `/` will correctly hit the fallback and receive `path: ""`.
 
 ## Controller Signature Binding (Flexible)
 

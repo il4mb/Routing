@@ -44,6 +44,35 @@ The engine supports patterns designed for infrastructure workloads:
 
 Named captures are exposed to adapters via `MatchResult::captures`.
 
+### Path Matching Semantics (Precise)
+
+The matcher treats route patterns as **anchored** against the whole path.
+
+- Matching is performed against `RoutingContext::path` (e.g. `/users/123`).
+- A route either matches the entire path or it does not (no partial-prefix matches unless your pattern explicitly allows it).
+
+Supported tokens and their intent:
+
+- Static segments: `/api/v1/users` must match exactly.
+- Named segment `{id}` matches **one path segment** (no `/`).
+- Named segment with regex `{id:[0-9]+}` matches one segment constrained by the regex.
+- Single segment wildcard `*` matches exactly one segment.
+- Greedy wildcard `**` matches the remainder of the path (including `/`).
+- Greedy named (legacy) `{path.*}` matches the remainder of the path.
+- Greedy named (explicit) `{rest:**}` matches the remainder of the path.
+
+Captures:
+
+- Named captures are returned as `captures[name] => string`.
+- The legacy HTTP adapter decodes capture values with `rawurldecode` (so `+` stays `+`).
+
+Empty greedy matches (important):
+
+- Greedy patterns can match an **empty** remainder.
+	For example, `/{path.*}` can match `/`.
+- Adapters should treat the capture value as `''` (empty string) in this case.
+	This avoids controller type errors for signatures like `notFound(string $path, ...)`.
+
 ### Host / Protocol / Header Matching
 
 - Host matcher supports `api.example.com` and `*.example.com`.

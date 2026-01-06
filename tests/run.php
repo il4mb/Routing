@@ -117,6 +117,30 @@ final class TestControllerMethodNotAllowed
     }
 }
 
+final class UserId
+{
+    public string $value;
+
+    private function __construct(string $value)
+    {
+        $this->value = $value;
+    }
+
+    public static function fromString(string $value): self
+    {
+        return new self($value);
+    }
+}
+
+final class TestControllerValueObject
+{
+    #[Route(Method::GET, '/vo/{id}')]
+    public function show(UserId $id, Request $req, Response $res, callable $next): string
+    {
+        return 'id=' . $id->value;
+    }
+}
+
 $tests = [];
 
 $tests['basic attribute route + capture'] = function (): void {
@@ -294,6 +318,149 @@ $tests['405 method not allowed sets Allow header'] = function (): void {
     $allow = (string)($res->headers['allow'] ?? '');
     test_contains($allow, 'GET', 'Allow header should include GET');
     test_contains($allow, 'POST', 'Allow header should include POST');
+};
+
+$tests['value object resolver binds class from capture'] = function (): void {
+    test_reset_http_env();
+    $_SERVER['REQUEST_URI'] = '/vo/abc-123';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+
+    $router = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+    ]);
+    $router->addRoute(new TestControllerValueObject());
+
+    $req = new Request(['clearState' => false]);
+    $res = $router->dispatch($req);
+    test_equal($res->getContent(), 'id=abc-123', 'ValueObjectResolver should construct object from capture');
+};
+
+$tests['basePath/autoDetectFolderOffset controls mounting'] = function (): void {
+    test_reset_http_env();
+    $_SERVER['SCRIPT_NAME'] = '/app/index.php';
+    $_SERVER['HTTP_HOST'] = 'example.com';
+
+    // 1) Auto-detect ON: route should be mounted under /app automatically.
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['REQUEST_URI'] = '/app/hello/x';
+    $router1 = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+        'autoDetectFolderOffset' => true,
+    ]);
+    $router1->addRoute(new TestControllerBasic());
+    $req1 = new Request(['clearState' => false]);
+    $res1 = $router1->dispatch($req1);
+    test_equal($res1->getContent(), 'hi x', 'Auto-detect should mount routes under script folder');
+
+    // 2) Auto-detect OFF: request under /app should not match.
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['REQUEST_URI'] = '/app/hello/x';
+    $router2 = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+        'autoDetectFolderOffset' => false,
+    ]);
+    $router2->addRoute(new TestControllerBasic());
+    $req2 = new Request(['clearState' => false]);
+    $res2 = $router2->dispatch($req2);
+    test_equal($res2->getCode(), 404, 'Disabling auto-detect should prevent implicit /app mounting');
+
+    // 3) Explicit basePath overrides auto-detect.
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['REQUEST_URI'] = '/api/hello/y';
+    $router3 = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+        'basePath' => '/api',
+        // even if enabled, basePath should win.
+        'autoDetectFolderOffset' => true,
+    ]);
+    $router3->addRoute(new TestControllerBasic());
+    $req3 = new Request(['clearState' => false]);
+    $res3 = $router3->dispatch($req3);
+    test_equal($res3->getContent(), 'hi y', 'Explicit basePath should override script folder detection');
+};
+
+$tests['standardized json error responses (404/405)'] = function (): void {
+    test_reset_http_env();
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_SERVER['HTTP_HOST'] = 'example.com';
+
+    // 404
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['REQUEST_URI'] = '/nope';
+    $router404 = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+        'errorFormat' => 'json',
+        'errorExposeDetails' => false,
+    ]);
+    $router404->addRoute(new TestControllerBasic());
+    $req404 = new Request(['clearState' => false]);
+    $res404 = $router404->dispatch($req404);
+    test_equal($res404->getCode(), 404, '404 should be returned for unmatched path');
+    test_assert(is_array($res404->getContent()), '404 json error should be array payload');
+    test_equal($res404->getContent()['error']['code'] ?? null, 404, '404 payload includes code');
+    test_equal($res404->getContent()['error']['message'] ?? null, 'Not Found', '404 payload uses reason phrase');
+
+    // 405
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_SERVER['REQUEST_URI'] = '/hello/z';
+    $router405 = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+        'errorFormat' => 'json',
+        'errorExposeDetails' => false,
+    ]);
+    $router405->addRoute(new TestControllerBasic());
+    $req405 = new Request(['clearState' => false]);
+    $res405 = $router405->dispatch($req405);
+    test_equal($res405->getCode(), 405, '405 should be returned when method mismatches');
+    test_assert(is_array($res405->getContent()), '405 json error should be array payload');
+    test_equal($res405->getContent()['error']['code'] ?? null, 405, '405 payload includes code');
+    test_equal($res405->getContent()['error']['message'] ?? null, 'Method Not Allowed', '405 payload uses reason phrase');
+    $allow = (string)($res405->headers['Allow']);
+    test_assert($allow !== '', '405 should set Allow header');
+};
+
+$tests['greedy capture {path.*} binds empty on /'] = function (): void {
+    test_reset_http_env();
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_SERVER['HTTP_HOST'] = 'example.com';
+
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['REQUEST_URI'] = '/';
+
+    $router = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+    ]);
+
+    final class GreedyFallbackController
+    {
+        #[Route(Method::GET, '/{path.*}', fallback: true)]
+        public function nf(string $path, Response $res): array
+        {
+            $res->setCode(404);
+            return ['path' => $path];
+        }
+    }
+
+    $router->addRoute(new GreedyFallbackController());
+    $req = new Request(['clearState' => false]);
+    $res = $router->dispatch($req);
+
+    test_equal($res->getCode(), 404, 'Root / should be handled by greedy fallback with 404');
+    test_equal(($res->getContent()['path'] ?? null), '', 'Greedy capture should bind empty string when matching /');
 };
 
 $failed = 0;

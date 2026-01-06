@@ -11,6 +11,15 @@ It covers:
 
 For router lifecycle, production options, and routing semantics, see [docs/http.md](docs/http.md).
 
+If your app is mounted under a URL prefix (e.g. you serve the app from `/api`), configure it explicitly on the router:
+
+```php
+$router = new Router(options: [
+  'basePath' => '/api',
+  'autoDetectFolderOffset' => false,
+]);
+```
+
 ## 1) Controller Signature (Argument Binding)
 
 A controller method is invoked through the `Callback` binder. You can declare parameters in any order.
@@ -68,6 +77,35 @@ Captures are strings from the path, but are cast when you type-hint:
 Route captures are decoded with path-safe semantics (`rawurldecode`).
 
 That means `+` stays `+` (unlike `urldecode`, which turns `+` into a space).
+
+## 1.1) Converters / Parameter Resolvers (Value Objects)
+
+If you want your controller to accept domain-specific types (value objects) instead of raw strings/ints, you can.
+
+By default, the binder includes a resolver that can build objects from a matching capture:
+
+- static `::fromString(string)`
+- static `::from(string)`
+- or a public constructor that accepts a single scalar
+
+Example:
+
+```php
+final class UserId
+{
+  public function __construct(public string $value) {}
+  public static function fromString(string $value): self { return new self($value); }
+}
+
+#[Route(Method::GET, '/users/{id}')]
+public function show(UserId $id, Request $req, Response $res, callable $next)
+{
+  return ['id' => $id->value];
+}
+```
+
+You can also register custom resolvers on the router (e.g. build an object from headers, cookies, or multiple captures)
+via the router option `parameterResolvers`.
 
 ## 2) Read Request Method + URL
 

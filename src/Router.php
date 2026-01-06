@@ -19,6 +19,7 @@ use Il4mb\Routing\Engine\RouterEngine;
 use Il4mb\Routing\Engine\Tracing\ArrayTracer;
 use Il4mb\Routing\Engine\Tracing\NullTracer;
 use Il4mb\Routing\Http\Code;
+use Il4mb\Routing\Http\ContentType;
 use Il4mb\Routing\Http\Request;
 use Il4mb\Routing\Http\Response;
 use InvalidArgumentException;
@@ -40,6 +41,9 @@ class Router implements Interceptor
     private ?array $compiledRouteDefs = null;
     private ?RoutingHook $engineHook = null;
 
+    /** @var list<\Il4mb\Routing\Binding\ParameterResolver> */
+    private array $parameterResolvers = [];
+
     public function __construct(array $interceptors = [], array $options = [])
     {
         $this->initOption($options);
@@ -50,36 +54,54 @@ class Router implements Interceptor
     {
         $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
 
-        if (!isset($options['pathOffset'])) {
-            $scriptName = $_SERVER['SCRIPT_NAME'] ?? false;
-            if ($scriptName) {
-                $this->routeOffset = dirname(trim($scriptName));
-            } else {
-                $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-                $file = null;
-                foreach ($traces as $trace) {
-                    if (isset($trace['file']) && strtolower(basename($trace['file'])) === 'index.php') {
-                        $file = $trace['file'];
-                        break;
+        $this->routeOffset = '';
+
+        // Prefer explicit basePath (more semantically clear than pathOffset).
+        if (isset($options['basePath']) && is_string($options['basePath'])) {
+            $this->routeOffset = $options['basePath'];
+        } elseif (isset($options['pathOffset']) && is_string($options['pathOffset'])) {
+            // Backward compatible alias.
+            $this->routeOffset = $options['pathOffset'];
+        } else {
+            $autoDetect = (bool)($options['autoDetectFolderOffset'] ?? true);
+            if ($autoDetect) {
+                $scriptName = $_SERVER['SCRIPT_NAME'] ?? false;
+                if ($scriptName) {
+                    $this->routeOffset = dirname(trim((string)$scriptName));
+                } else {
+                    $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+                    $file = null;
+                    foreach ($traces as $trace) {
+                        if (isset($trace['file']) && strtolower(basename($trace['file'])) === 'index.php') {
+                            $file = $trace['file'];
+                            break;
+                        }
+                    }
+
+                    if (is_string($root) && is_string($file)) {
+                        $root = preg_replace('/\\\\|\//im', '/', $root);
+                        $path = preg_replace('/\\\\|\//im', '/', dirname($file));
+                        $offset = str_replace($root, "", $path);
+                        $this->routeOffset = $offset;
+                    } else {
+                        $this->routeOffset = "";
                     }
                 }
-
-                if (is_string($root) && is_string($file)) {
-                    $root = preg_replace('/\\\\|\\//im', '/', $root);
-                    $path = preg_replace('/\\\\|\\//im', '/', dirname($file));
-                    $offset = str_replace($root, "", $path);
-                    $this->routeOffset = $offset;
-                } else {
-                    $this->routeOffset = "";
-                }
             }
-        } else {
-            $this->routeOffset = $options['pathOffset'];
         }
 
         $this->options = [
             'throwOnDuplicatePath' => true,
             'autoDetectFolderOffset' => true,
+            // Preferred explicit mount path (alias: pathOffset).
+            'basePath' => null,
+            // Error response formatting: legacy|text|json
+            // - legacy: keep historical "Error: <code>, <message>" behavior
+            // - text: plain reason phrase (or exception message when exposing details)
+            // - json: {"error": {"code": ..., "message": ...}} (optionally includes details)
+            'errorFormat' => 'legacy',
+            // When true, include exception message/class in standardized error responses.
+            'errorExposeDetails' => false,
             // Legacy behavior: if multiple routes match, execute them in order.
             // Supported values: chain|first|error_on_ambiguous
             'decisionPolicy' => DecisionPolicy::CHAIN,
@@ -91,6 +113,10 @@ class Router implements Interceptor
             'manageHtaccess' => true,
             ...$options,
         ];
+
+        if (isset($this->options['parameterResolvers']) && is_array($this->options['parameterResolvers'])) {
+            $this->setParameterResolvers($this->options['parameterResolvers']);
+        }
 
         if (($this->options['manageHtaccess'] ?? true) === true) {
             $this->controlHtaccess($root);
@@ -130,6 +156,19 @@ class Router implements Interceptor
     public function setRoutingHook(RoutingHook $hook): void
     {
         $this->engineHook = $hook;
+    }
+
+    /**
+     * @param list<\Il4mb\Routing\Binding\ParameterResolver> $resolvers
+     */
+    public function setParameterResolvers(array $resolvers): void
+    {
+        $this->parameterResolvers = [];
+        foreach ($resolvers as $resolver) {
+            if ($resolver instanceof \Il4mb\Routing\Binding\ParameterResolver) {
+                $this->parameterResolvers[] = $resolver;
+            }
+        }
     }
 
     public function removeInterceptor(Interceptor $interceptor): void
@@ -286,7 +325,7 @@ class Router implements Interceptor
             foreach ($method->getAttributes() as $defAttr) {
                 if ($defAttr->getName() == Route::class) {
                     $routeInstance = $defAttr->newInstance();
-                    $routeInstance->callback = Callback::create($method->getName(), $controller);
+                    $routeInstance->callback = Callback::createWithResolvers($method->getName(), $controller, $this->parameterResolvers);
                     $this->addRouteInternal($routeInstance, $basepath);
                 }
             }
@@ -363,6 +402,10 @@ class Router implements Interceptor
                 foreach (($selected->parameters ?? []) as $param) {
                     if ($param?->name !== null && array_key_exists($param->name, $caps)) {
                         $param->value = rawurldecode((string)$caps[$param->name]);
+                    } elseif ($param?->flag === '.*') {
+                        // Greedy captures like `{path.*}` can legally match an empty string (e.g. root `/`).
+                        // Ensure the bound value is a string to avoid controller TypeErrors.
+                        $param->value = '';
                     }
                 }
                 $matchedRoutes[] = $selected;
@@ -468,8 +511,36 @@ class Router implements Interceptor
             }
         }
         $response->setCode(Code::fromCode($code) ?? 500);
+
         if (empty($response->getContent())) {
-            $response->setContent("Error: {$t->getCode()}, {$t->getMessage()}");
+            $format = strtolower((string)($this->options['errorFormat'] ?? 'legacy'));
+            $expose = (bool)($this->options['errorExposeDetails'] ?? false);
+
+            $reason = Code::reasonPhrase($code) ?? 'Error';
+            $message = $expose ? (string)$t->getMessage() : $reason;
+
+            if ($format === 'json') {
+                $payload = [
+                    'error' => [
+                        'code' => $code,
+                        'message' => $message,
+                    ],
+                ];
+                if ($expose) {
+                    $payload['error']['exception'] = get_class($t);
+                    if (!empty($response->headers['Allow'] ?? '')) {
+                        $payload['error']['allow'] = (string)$response->headers['Allow'];
+                    }
+                }
+                $response->setContentType(ContentType::JSON);
+                $response->setContent($payload);
+            } elseif ($format === 'text') {
+                $response->setContentType(ContentType::TEXT);
+                $response->setContent($message);
+            } else {
+                // legacy
+                $response->setContent("Error: {$t->getCode()}, {$t->getMessage()}");
+            }
         }
         return false;
     }

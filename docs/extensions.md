@@ -118,3 +118,23 @@ Production guidance:
 - disable `.htaccess` management by setting `manageHtaccess=false`
 - enable `debugTrace=true` temporarily when diagnosing routing issues
 - consider `decisionPolicy=error_on_ambiguous` for security-sensitive routes
+
+## HTTP: Custom Parameter Resolvers (Converters)
+
+The legacy HTTP adapter supports custom controller parameter resolvers to convert captures into domain types.
+
+- Interface: `Il4mb\\Routing\\Binding\\ParameterResolver`
+- Default resolver: `Il4mb\\Routing\\Binding\\Resolvers\\ValueObjectResolver`
+
+Configure via router options:
+
+```php
+use Il4mb\\Routing\\Router;
+
+$router = new Router(options: [
+	'manageHtaccess' => false,
+	'parameterResolvers' => [
+		// your custom resolvers here
+	],
+]);
+```

@@ -125,6 +125,7 @@ if ($outcome->ok) {
 - HTTP attribute routing (basic): [examples/http-basic.php](examples/http-basic.php)
 - HTTP attribute routing (header constraints): [examples/http-headers.php](examples/http-headers.php)
 - HTTP attribute routing (priority + fallback): [examples/http-priority-fallback.php](examples/http-priority-fallback.php)
+- Real HTTP app (public/index.php style): [examples/http-app/README.md](examples/http-app/README.md)
 
 ## Tests
 
