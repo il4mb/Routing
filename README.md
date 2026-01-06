@@ -143,5 +143,5 @@ php -d zend.assertions=1 -d assert.exception=1 tests/run.php
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
 

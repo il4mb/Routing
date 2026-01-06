@@ -12,6 +12,8 @@ use Il4mb\Routing\Engine\Errors\NoRouteMatchedException;
 use Il4mb\Routing\Engine\FailureMode;
 use Il4mb\Routing\Engine\Hooks\NoopHook;
 use Il4mb\Routing\Engine\Hooks\RoutingHook;
+use Il4mb\Routing\Engine\Matchers\CompositeMatcher;
+use Il4mb\Routing\Engine\Matchers\MethodMatcher;
 use Il4mb\Routing\Engine\RouteTable;
 use Il4mb\Routing\Engine\RouterEngine;
 use Il4mb\Routing\Engine\Tracing\ArrayTracer;
@@ -34,6 +36,8 @@ class Router implements Interceptor
 
     private bool $compiledDirty = true;
     private ?RouteTable $compiledTable = null;
+    /** @var list<\Il4mb\Routing\Engine\RouteDefinition>|null */
+    private ?array $compiledRouteDefs = null;
     private ?RoutingHook $engineHook = null;
 
     public function __construct(array $interceptors = [], array $options = [])
@@ -218,8 +222,50 @@ class Router implements Interceptor
             $routeDefs[] = HttpRouteCompiler::compile($r, $id);
         }
 
+        $this->compiledRouteDefs = $routeDefs;
         $this->compiledTable = new RouteTable($routeDefs);
         $this->compiledDirty = false;
+    }
+
+    /**
+     * @return list<string> Uppercased methods that are valid for this context.
+     */
+    private function allowedMethodsForContext(\Il4mb\Routing\Engine\RoutingContext $context): array
+    {
+        $this->ensureCompiled();
+        $defs = $this->compiledRouteDefs ?? [];
+
+        $allowed = [];
+        foreach ($defs as $def) {
+            if ($def->fallback) {
+                // Avoid catch-all routes polluting Allow.
+                continue;
+            }
+
+            $method = null;
+            $others = [];
+            foreach ($def->matchers as $m) {
+                if ($m instanceof MethodMatcher) {
+                    $method = $m->method();
+                    continue;
+                }
+                $others[] = $m;
+            }
+
+            // If route has no explicit method matcher, treat it as not contributing to Allow.
+            if ($method === null || $method === '' || $method === '*') {
+                continue;
+            }
+
+            $res = (new CompositeMatcher($others))->match($context);
+            if ($res->matched) {
+                $allowed[strtoupper($method)] = true;
+            }
+        }
+
+        $methods = array_keys($allowed);
+        sort($methods);
+        return $methods;
     }
 
     private function makeRouteId(Route $route, int $index): string
@@ -286,7 +332,21 @@ class Router implements Interceptor
             }
 
             if (!$outcome->ok) {
-                throw $outcome->error;
+                $err = $outcome->error;
+                if (
+                    $err instanceof NoRouteMatchedException
+                    && $failureMode !== FailureMode::FAIL_OPEN
+                    && !empty((string)($request->method ?? ''))
+                ) {
+                    $allowed = $this->allowedMethodsForContext($context);
+                    $actual = strtoupper((string)($request->method ?? ''));
+                    if (count($allowed) > 0 && !in_array($actual, $allowed, true)) {
+                        $response->headers['Allow'] = implode(', ', $allowed);
+                        throw new Exception('Method not allowed.', 405);
+                    }
+                }
+
+                throw $err;
             }
 
             $decision = $outcome->decision;

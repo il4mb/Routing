@@ -1,6 +1,6 @@
 {
     "name": "il4mb/routing",
-    "description": "Simple Routing System",
+    "description": "Deterministic routing engine with an HTTP attribute router adapter (priority, fallback, wildcard matching, tracing, and reloadable rules)",
     "type": "library",
     "require": {
         "php": "^8.0"

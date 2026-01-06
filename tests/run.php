@@ -102,6 +102,21 @@ final class TestControllerBindingContract
     }
 }
 
+final class TestControllerMethodNotAllowed
+{
+    #[Route(Method::GET, '/m')]
+    public function get(Request $req, Response $res, callable $next): string
+    {
+        return 'get';
+    }
+
+    #[Route(Method::POST, '/m')]
+    public function post(Request $req, Response $res, callable $next): string
+    {
+        return 'post';
+    }
+}
+
 $tests = [];
 
 $tests['basic attribute route + capture'] = function (): void {
@@ -258,6 +273,27 @@ $tests['binding contract: defaults + class injection win'] = function (): void {
     $req2 = new Request(['clearState' => false]);
     $res2 = $router->dispatch($req2);
     test_equal($res2->getContent(), 'ok', 'Class-typed params should be injected, not bound from same-named captures');
+};
+
+$tests['405 method not allowed sets Allow header'] = function (): void {
+    test_reset_http_env();
+    $_SERVER['REQUEST_URI'] = '/m';
+    $_SERVER['REQUEST_METHOD'] = 'PUT';
+
+    $router = new Router(options: [
+        'manageHtaccess' => false,
+        'decisionPolicy' => 'first',
+        'failureMode' => 'fail_closed',
+    ]);
+    $router->addRoute(new TestControllerMethodNotAllowed());
+
+    $req = new Request(['clearState' => false]);
+    $res = $router->dispatch($req);
+
+    test_equal($res->getCode(), 405, 'Should respond with 405 when path matches but method does not');
+    $allow = (string)($res->headers['allow'] ?? '');
+    test_contains($allow, 'GET', 'Allow header should include GET');
+    test_contains($allow, 'POST', 'Allow header should include POST');
 };
 
 $failed = 0;

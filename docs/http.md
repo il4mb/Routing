@@ -60,6 +60,17 @@ When `debugTrace=true`, the router stores engine trace information into the requ
 
 This is intended for troubleshooting and building tooling.
 
+## 405 Method Not Allowed
+
+When no route matches, the router will additionally check whether the same path/constraints match **for a different HTTP method**.
+
+If so, it responds with:
+
+- status code `405 Method Not Allowed`
+- an `Allow: ...` header listing the supported methods
+
+This makes the legacy HTTP adapter behave more like a production HTTP router.
+
 ## Attribute Route Fields
 
 The attribute `#[Route(...)]` supports:
